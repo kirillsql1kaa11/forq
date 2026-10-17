@@ -3,6 +3,7 @@
   publish = "build"
 
 [build.environment]
+  NODE_VERSION = "22"
   PUBLIC_SUPABASE_URL = "https://nuwtxfinexztrllabbfu.supabase.co"
   PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_CS8PamZCh5R5jBdPWFlsAQ_4jXnmgTb"
 
