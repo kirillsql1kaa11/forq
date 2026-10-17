@@ -3,6 +3,7 @@ export type Profile = {
 	username: string;
 	bio: string | null;
 	avatar_url: string | null;
+	pinned_post_id: number | null;
 	created_at: string;
 };
 
@@ -18,6 +19,7 @@ export type FeedPost = {
 	comment_count: number;
 	liked_by_me: boolean;
 	pending?: boolean;
+	cursor?: number;
 };
 
 export type Comment = {
@@ -49,6 +51,30 @@ export type Notification = {
 export type MentionCandidate = {
 	username: string;
 	avatar_url: string | null;
+};
+
+export type ReplyPost = {
+	body: string;
+	deleted_at: string | null;
+};
+
+export type UserReply = {
+	id: number;
+	post_id: number;
+	parent_id: number | null;
+	body: string;
+	created_at: string;
+	posts: ReplyPost | null;
+};
+
+export const PROFILE_TABS = ['posts', 'replies', 'likes'] as const;
+
+export type ProfileTab = (typeof PROFILE_TABS)[number];
+
+export const PROFILE_TAB_TEXT: Record<ProfileTab, string> = {
+	posts: 'Посты',
+	replies: 'Ответы',
+	likes: 'Лайки'
 };
 
 export const BODY_MAX = 500;

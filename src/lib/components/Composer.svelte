@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { searchProfiles } from '#lib/api';
+	import { postDraft } from '#lib/draft.svelte';
 	import { mentionQuery } from '#lib/format';
 	import { BODY_MAX, type MentionCandidate } from '#lib/types';
 	import Avatar from './Avatar.svelte';
@@ -8,15 +10,17 @@
 		placeholder = 'Что происходит?',
 		submitLabel = 'Опубликовать',
 		autofocus = false,
+		persist = false,
 		onsubmit
 	}: {
 		placeholder?: string;
 		submitLabel?: string;
 		autofocus?: boolean;
+		persist?: boolean;
 		onsubmit: (body: string) => Promise<void>;
 	} = $props();
 
-	let body = $state('');
+	let body = $state(untrack(() => (persist ? postDraft.text : '')));
 	let busy = $state(false);
 	let error = $state('');
 	let field = $state<HTMLTextAreaElement | null>(null);
@@ -38,10 +42,15 @@
 		highlighted = 0;
 	}
 
+	function setDraft(value: string) {
+		if (persist) postDraft.set(value);
+	}
+
 	function oninput(event: Event) {
 		const element = event.currentTarget as HTMLTextAreaElement;
 		const found = mentionQuery(element.value, element.selectionStart ?? element.value.length);
 
+		setDraft(element.value);
 		mention = found;
 		highlighted = 0;
 
@@ -64,6 +73,7 @@
 		const text = `@${candidate.username} `;
 
 		body = head + text + body.slice(caret);
+		setDraft(body);
 
 		const next = head.length + text.length;
 		void Promise.resolve().then(() => {
@@ -98,6 +108,7 @@
 
 		const text = body.trim();
 		body = '';
+		setDraft('');
 		reset();
 		busy = true;
 		error = '';
@@ -106,6 +117,7 @@
 			await onsubmit(text);
 		} catch (cause) {
 			body = text;
+			setDraft(text);
 			error = cause instanceof Error ? cause.message : String(cause);
 		} finally {
 			busy = false;

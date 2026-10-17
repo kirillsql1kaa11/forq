@@ -46,7 +46,7 @@ class Session {
 
 		const { data } = await supabase
 			.from('profiles')
-			.select('id, username, bio, avatar_url, created_at')
+			.select('id, username, bio, avatar_url, pinned_post_id, created_at')
 			.eq('id', this.user.id)
 			.maybeSingle();
 

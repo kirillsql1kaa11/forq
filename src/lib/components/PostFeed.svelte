@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { createPost, deletePost, editPost, errorMessage, setLike } from '#lib/api';
+	import { createPost, deletePost, editPost, errorMessage, setLike, setPinnedPost } from '#lib/api';
 	import type { PostList } from '#lib/posts.svelte';
 	import { session } from '#lib/session.svelte';
 	import type { FeedPost } from '#lib/types';
@@ -11,13 +11,25 @@
 		list,
 		composer = false,
 		empty = 'Пока пусто.',
-		header
+		header,
+		exclude,
+		onpin,
+		pinnedId
 	}: {
 		list: PostList;
 		composer?: boolean;
 		empty?: string;
 		header?: Snippet;
+		exclude?: number | null;
+		onpin?: (post: FeedPost) => void;
+		pinnedId?: number | null;
 	} = $props();
+
+	const pinned = $derived(
+		pinnedId === undefined ? (session.profile?.pinned_post_id ?? null) : pinnedId
+	);
+
+	const visible = $derived(list.items.filter((post) => post.id !== exclude));
 
 	async function publish(body: string) {
 		if (!session.user) throw new Error('Нужно войти в аккаунт.');
@@ -69,10 +81,27 @@
 			list.actionError = errorMessage(cause);
 		}
 	}
+
+	async function pin(post: FeedPost) {
+		if (onpin) {
+			onpin(post);
+			return;
+		}
+
+		if (!session.user || !session.profile) return;
+		const next = session.profile.pinned_post_id === post.id ? null : post.id;
+
+		try {
+			await setPinnedPost(session.user.id, next);
+			await session.refreshProfile();
+		} catch (cause) {
+			list.actionError = errorMessage(cause);
+		}
+	}
 </script>
 
 {#if composer}
-	<Composer onsubmit={publish} />
+	<Composer onsubmit={publish} persist />
 {/if}
 
 {#if header}
@@ -93,13 +122,15 @@
 	<p class="muted feed__empty">{empty}</p>
 {:else}
 	<div class="feed">
-		{#each list.items as post (post.id)}
+		{#each visible as post (post.id)}
 			<PostCard
 				{post}
 				currentUserId={session.user?.id ?? null}
+				pinned={post.id === pinned}
 				onlike={like}
 				onedit={save}
 				onremove={remove}
+				onpin={pin}
 			/>
 		{/each}
 	</div>

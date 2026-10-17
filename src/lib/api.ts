@@ -8,11 +8,13 @@ import {
 	type FeedPost,
 	type MentionCandidate,
 	type Notification,
-	type Profile
+	type Profile,
+	type ReplyPost,
+	type UserReply
 } from './types';
 
 type DbError = { code?: string; message: string };
-type ErrorKind = 'post' | 'comment' | 'username' | 'generic';
+type ErrorKind = 'post' | 'comment' | 'username' | 'pin' | 'generic';
 
 const AUTH_MESSAGES: [string, string][] = [
 	['invalid login credentials', 'Неверная почта или пароль.'],
@@ -46,6 +48,7 @@ function describe(error: DbError, kind: ErrorKind): string {
 		case '42501':
 			return 'Нужно войти в аккаунт.';
 		case '23514':
+			if (kind === 'pin') return 'Закрепить можно только свой неудалённый пост.';
 			return kind === 'comment' ? 'Ответ пустой или длиннее 500 символов.' : 'Текст пустой или длиннее 500 символов.';
 		case '23505':
 			return kind === 'username' ? 'Этот ник уже занят.' : 'Такая запись уже есть.';
@@ -101,6 +104,16 @@ export async function fetchUserPosts(authorId: string, cursor?: number): Promise
 	return unwrap<FeedPost[]>(data, error, 'generic') ?? [];
 }
 
+async function postsByIds(ids: number[]): Promise<FeedPost[]> {
+	const { data, error } = await supabase
+		.from('feed')
+		.select('*')
+		.in('id', ids)
+		.order('id', { ascending: false });
+
+	return unwrap<FeedPost[]>(data, error, 'generic') ?? [];
+}
+
 export async function fetchTagFeed(tag: string, cursor?: number): Promise<FeedPost[]> {
 	let query = supabase
 		.from('post_tags')
@@ -114,16 +127,74 @@ export async function fetchTagFeed(tag: string, cursor?: number): Promise<FeedPo
 	const rows = unwrap<{ post_id: number }[]>(data, error, 'generic') ?? [];
 	if (rows.length === 0) return [];
 
-	const { data: posts, error: postsError } = await supabase
-		.from('feed')
-		.select('*')
-		.in(
-			'id',
-			rows.map((row) => row.post_id)
-		)
-		.order('id', { ascending: false });
+	return postsByIds(rows.map((row) => row.post_id));
+}
 
-	return unwrap<FeedPost[]>(posts, postsError, 'generic') ?? [];
+type LikeRow = { id: number; post_id: number };
+
+async function likeRows(userId: string, cursor?: number): Promise<LikeRow[]> {
+	let query = supabase
+		.from('likes')
+		.select('id, post_id')
+		.eq('user_id', userId)
+		.order('id', { ascending: false })
+		.limit(PAGE_SIZE);
+	if (cursor !== undefined) query = query.lt('id', cursor);
+
+	const { data, error } = await query;
+	return unwrap<LikeRow[]>(data, error, 'generic') ?? [];
+}
+
+export async function fetchLikedPosts(userId: string, cursor?: number): Promise<FeedPost[]> {
+	const result: FeedPost[] = [];
+	let after = cursor;
+
+	while (result.length < PAGE_SIZE) {
+		const rows = await likeRows(userId, after);
+		if (rows.length === 0) break;
+
+		const found = await postsByIds(rows.map((row) => row.post_id));
+		const byId = new Map(found.map((post) => [post.id, post]));
+
+		for (const row of rows) {
+			const post = byId.get(row.post_id);
+			if (post) result.push({ ...post, cursor: row.id });
+		}
+
+		const tail = rows[rows.length - 1];
+		after = tail.id;
+
+		const last = result[result.length - 1];
+		if (last) result[result.length - 1] = { ...last, cursor: tail.id };
+
+		if (rows.length < PAGE_SIZE) break;
+	}
+
+	return result;
+}
+
+type ReplyRow = Omit<UserReply, 'posts'> & {
+	posts: ReplyPost | ReplyPost[] | null;
+};
+
+function normalizeReply(row: ReplyRow): UserReply {
+	const { posts, ...rest } = row;
+	return { ...rest, posts: Array.isArray(posts) ? (posts[0] ?? null) : posts };
+}
+
+export async function fetchUserReplies(authorId: string, cursor?: number): Promise<UserReply[]> {
+	let query = supabase
+		.from('comments')
+		.select('id, post_id, parent_id, body, created_at, posts(body, deleted_at)')
+		.eq('author_id', authorId)
+		.is('deleted_at', null)
+		.order('id', { ascending: false })
+		.limit(PAGE_SIZE);
+	if (cursor !== undefined) query = query.lt('id', cursor);
+
+	const { data, error } = await query;
+	const rows = unwrap<unknown[]>(data, error, 'generic') ?? [];
+	return rows.map((row) => normalizeReply(row as ReplyRow));
 }
 
 export async function fetchPost(id: number): Promise<FeedPost | null> {
@@ -222,7 +293,7 @@ export async function deleteComment(id: number): Promise<void> {
 export async function fetchProfile(username: string): Promise<Profile | null> {
 	const { data, error } = await supabase
 		.from('profiles')
-		.select('id, username, bio, avatar_url, created_at')
+		.select('id, username, bio, avatar_url, pinned_post_id, created_at')
 		.eq('username', username)
 		.maybeSingle();
 
@@ -254,6 +325,15 @@ export async function updateProfile(
 ): Promise<void> {
 	const { error } = await supabase.from('profiles').update(patch).eq('id', id);
 	if (error) throw new Error(describe(error, 'generic'));
+}
+
+export async function setPinnedPost(userId: string, postId: number | null): Promise<void> {
+	const { error } = await supabase
+		.from('profiles')
+		.update({ pinned_post_id: postId })
+		.eq('id', userId);
+
+	if (error) throw new Error(describe(error, 'pin'));
 }
 
 export async function fetchNotifications(cursor?: number): Promise<Notification[]> {

@@ -38,7 +38,7 @@ export class PostList {
 		this.loadingMore = true;
 
 		try {
-			const page = await this.loader(last.id);
+			const page = await this.loader(last.cursor ?? last.id);
 			this.items = [...this.items, ...page];
 			this.exhausted = page.length < PAGE_SIZE;
 		} catch (cause) {
@@ -46,6 +46,24 @@ export class PostList {
 		} finally {
 			this.loadingMore = false;
 		}
+	}
+
+	reset(): void {
+		this.items = [];
+		this.loading = true;
+		this.loadingMore = false;
+		this.exhausted = false;
+		this.error = '';
+		this.actionError = '';
+	}
+
+	fill(posts: FeedPost[]): void {
+		this.items = posts;
+		this.loading = false;
+		this.loadingMore = false;
+		this.exhausted = true;
+		this.error = '';
+		this.actionError = '';
 	}
 
 	async prepend(postId: number): Promise<void> {

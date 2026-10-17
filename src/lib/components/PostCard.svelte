@@ -8,15 +8,19 @@
 	let {
 		post,
 		currentUserId = null,
+		pinned = false,
 		onlike,
 		onedit,
-		onremove
+		onremove,
+		onpin
 	}: {
 		post: FeedPost;
 		currentUserId?: string | null;
+		pinned?: boolean;
 		onlike: (post: FeedPost) => void;
 		onedit: (post: FeedPost, body: string) => void;
 		onremove: (post: FeedPost) => void;
+		onpin?: (post: FeedPost) => void;
 	} = $props();
 
 	let editing = $state(false);
@@ -54,6 +58,9 @@
 				</a>
 				{#if post.edited_at}
 					<span class="post__edited">изменён</span>
+				{/if}
+				{#if pinned}
+					<span class="post__pinned">закреплён</span>
 				{/if}
 			{/if}
 		</div>
@@ -99,6 +106,17 @@
 				</a>
 
 				{#if mine}
+					{#if onpin}
+						<button
+							type="button"
+							class="btn btn--quiet post__action"
+							onclick={() => onpin(post)}
+							aria-pressed={pinned}
+						>
+							{pinned ? 'Открепить' : 'Закрепить'}
+						</button>
+					{/if}
+
 					{#if confirming}
 						<button type="button" class="btn btn--quiet post__action post__action--danger" onclick={() => onremove(post)}>
 							Удалить?
@@ -148,7 +166,8 @@
 	}
 
 	.post__time,
-	.post__edited {
+	.post__edited,
+	.post__pinned {
 		color: var(--muted);
 		font-size: 0.8125rem;
 	}

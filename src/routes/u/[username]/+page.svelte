@@ -1,93 +1,180 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import Avatar from '#lib/components/Avatar.svelte';
-	import PostCard from '#lib/components/PostCard.svelte';
+	import { page } from '$app/state';
 	import {
-		deletePost,
-		editPost,
 		errorMessage,
+		fetchLikedPosts,
+		fetchPost,
 		fetchProfile,
 		fetchUserPosts,
-		setLike
+		fetchUserReplies,
+		setPinnedPost
 	} from '#lib/api';
-	import { monthYear } from '#lib/format';
+	import Avatar from '#lib/components/Avatar.svelte';
+	import PostFeed from '#lib/components/PostFeed.svelte';
+	import RichText from '#lib/components/RichText.svelte';
+	import { monthYear, timeAgo } from '#lib/format';
 	import { PostList } from '#lib/posts.svelte';
 	import { session } from '#lib/session.svelte';
-	import type { FeedPost, Profile } from '#lib/types';
+	import {
+		PAGE_SIZE,
+		PROFILE_TABS,
+		PROFILE_TAB_TEXT,
+		type FeedPost,
+		type Profile,
+		type ProfileTab,
+		type UserReply
+	} from '#lib/types';
 
 	let profile = $state<Profile | null>(null);
-	let authorId: string | null = null;
-	let loading = $state(true);
+	let authorId = $state<string | null>(null);
+	let loadingProfile = $state(true);
 	let notFound = $state(false);
+	let actionError = $state('');
+	let replies = $state<UserReply[]>([]);
+	let repliesLoading = $state(false);
+	let repliesExhausted = $state(true);
+	let repliesError = $state('');
 	let current: string | undefined = undefined;
-	let currentUser: string | null | undefined = undefined;
+	let tabKey: string | undefined = undefined;
 
-	const list = new PostList((cursor) =>
+	const posts = new PostList((cursor) =>
 		authorId ? fetchUserPosts(authorId, cursor) : Promise.resolve([])
 	);
+
+	const liked = new PostList((cursor) =>
+		authorId ? fetchLikedPosts(authorId, cursor) : Promise.resolve([])
+	);
+
+	const pinnedList = new PostList(() => Promise.resolve([]));
+
+	const tab = $derived(toTab(page.url.searchParams.get('tab')));
+	const mine = $derived(profile !== null && session.profile?.id === profile.id);
+
+	function toTab(value: string | null): ProfileTab {
+		return PROFILE_TABS.includes(value as ProfileTab) ? (value as ProfileTab) : 'posts';
+	}
+
+	function tabHref(item: ProfileTab): string {
+		const path = resolve('/u/[username]', { username: profile?.username ?? '' });
+		return item === 'posts' ? path : `${path}?tab=${item}`;
+	}
 
 	$effect(() => {
 		const name = page.params.username ?? '';
 		const userId = session.user?.id ?? null;
-		if (name === current && userId === currentUser) return;
-		current = name;
-		currentUser = userId;
-		void load(name);
+		const key = `${name}|${userId ?? ''}`;
+		if (key === current) return;
+		current = key;
+		void loadProfile(name);
 	});
 
-	async function load(name: string) {
-		loading = true;
+	$effect(() => {
+		const id = authorId;
+		const active = tab;
+		const userId = session.user?.id ?? null;
+		const key = `${id ?? ''}|${active}|${userId ?? ''}`;
+		if (key === tabKey || id === null) return;
+		tabKey = key;
+		void loadTab(id, active);
+	});
+
+	async function loadProfile(name: string) {
+		loadingProfile = true;
 		notFound = false;
+		actionError = '';
+		profile = null;
+		authorId = null;
+		replies = [];
+		repliesError = '';
+		repliesExhausted = true;
+		posts.reset();
+		liked.reset();
+		pinnedList.fill([]);
 
 		try {
 			const found = await fetchProfile(name);
 
 			if (!found) {
-				profile = null;
 				notFound = true;
 				return;
 			}
 
+			if (found.pinned_post_id !== null) {
+				const candidate = await fetchPost(found.pinned_post_id);
+				pinnedList.fill(candidate && candidate.author_id === found.id ? [candidate] : []);
+			}
+
 			profile = found;
 			authorId = found.id;
-			await list.load();
 		} catch (cause) {
-			list.error = errorMessage(cause);
+			actionError = errorMessage(cause);
 		} finally {
-			loading = false;
+			loadingProfile = false;
 		}
 	}
 
-	async function like(post: FeedPost) {
-		if (!session.user) return;
-		const next = !post.liked_by_me;
+	async function loadTab(id: string, active: ProfileTab) {
+		actionError = '';
 
-		list.markLike(post.id, next);
+		if (active === 'posts') {
+			await posts.load();
+			return;
+		}
+
+		if (active === 'likes') {
+			await liked.load();
+			return;
+		}
+
+		replies = [];
+		repliesExhausted = true;
+		await loadReplies(id);
+	}
+
+	async function loadReplies(id: string) {
+		repliesLoading = true;
+		repliesError = '';
 
 		try {
-			await setLike(post.id, session.user.id, next);
+			const batch = await fetchUserReplies(id);
+			replies = batch;
+			repliesExhausted = batch.length < PAGE_SIZE;
 		} catch (cause) {
-			list.markLike(post.id, !next);
-			list.actionError = errorMessage(cause);
+			repliesError = errorMessage(cause);
+		} finally {
+			repliesLoading = false;
 		}
 	}
 
-	async function save(post: FeedPost, body: string) {
+	async function moreReplies() {
+		const last = replies.at(-1);
+		if (!authorId || last === undefined || repliesLoading || repliesExhausted) return;
+
+		repliesLoading = true;
+
 		try {
-			await editPost(post.id, body);
-			list.markBody(post.id, body, new Date().toISOString());
+			const batch = await fetchUserReplies(authorId, last.id);
+			replies = [...replies, ...batch];
+			repliesExhausted = batch.length < PAGE_SIZE;
 		} catch (cause) {
-			list.actionError = errorMessage(cause);
+			repliesError = errorMessage(cause);
+		} finally {
+			repliesLoading = false;
 		}
 	}
 
-	async function remove(post: FeedPost) {
+	async function pinPost(post: FeedPost) {
+		if (!session.user || !profile) return;
+		const next = profile.pinned_post_id === post.id ? null : post.id;
+
 		try {
-			await deletePost(post.id);
-			list.drop(post.id);
+			await setPinnedPost(session.user.id, next);
+			profile = { ...profile, pinned_post_id: next };
+			pinnedList.fill(next === null ? [] : [post]);
+			await session.refreshProfile();
 		} catch (cause) {
-			list.actionError = errorMessage(cause);
+			actionError = errorMessage(cause);
 		}
 	}
 </script>
@@ -96,7 +183,7 @@
 	<title>{profile ? `@${profile.username} — ForQ` : 'Профиль — ForQ'}</title>
 </svelte:head>
 
-{#if loading}
+{#if loadingProfile}
 	<p class="muted">Загрузка…</p>
 {:else if notFound || !profile}
 	<h1>Профиль не найден</h1>
@@ -111,36 +198,85 @@
 			{/if}
 			<p class="small muted">С {monthYear(profile.created_at)}</p>
 
-			{#if session.profile?.id === profile.id}
+			{#if mine}
 				<a class="btn btn--quiet profile__edit" href={resolve('/settings')}>Изменить профиль</a>
 			{/if}
 		</div>
 	</header>
 
-	{#if list.actionError}
-		<p class="alert alert--error" role="alert">{list.actionError}</p>
+	<nav class="tabs" aria-label="Разделы профиля">
+		{#each PROFILE_TABS as item (item)}
+			<a
+				class="tabs__tab"
+				class:tabs__tab--on={item === tab}
+				aria-current={item === tab ? 'page' : undefined}
+				href={tabHref(item)}
+			>
+				{PROFILE_TAB_TEXT[item]}
+			</a>
+		{/each}
+	</nav>
+
+	{#if actionError}
+		<p class="alert alert--error" role="alert">{actionError}</p>
 	{/if}
 
-	{#if list.loading}
-		<p class="muted">Загрузка…</p>
-	{:else if list.error}
-		<p class="alert alert--error" role="alert">{list.error}</p>
-	{:else if list.items.length === 0}
-		<p class="muted">Постов пока нет.</p>
-	{:else}
-		{#each list.items as post (post.id)}
-			<PostCard
-				{post}
-				currentUserId={session.user?.id ?? null}
-				onlike={like}
-				onedit={save}
-				onremove={remove}
+	{#if tab === 'posts'}
+		{#if pinnedList.items.length > 0}
+			<PostFeed
+				list={pinnedList}
+				onpin={pinPost}
+				pinnedId={profile.pinned_post_id}
 			/>
-		{/each}
+		{/if}
 
-		{#if !list.exhausted}
-			<button type="button" class="btn more" onclick={() => list.more()} disabled={list.loadingMore}>
-				{list.loadingMore ? 'Загрузка…' : 'Показать ещё'}
+		<PostFeed
+			list={posts}
+			empty="Постов пока нет."
+			exclude={profile.pinned_post_id}
+			pinnedId={profile.pinned_post_id}
+			onpin={pinPost}
+		/>
+	{:else if tab === 'likes'}
+		<PostFeed list={liked} empty="Отметок «нравится» пока нет." onpin={pinPost} pinnedId={profile.pinned_post_id} />
+	{:else if repliesLoading && replies.length === 0}
+		<p class="muted">Загрузка…</p>
+	{:else if repliesError}
+		<p class="alert alert--error" role="alert">{repliesError}</p>
+	{:else if replies.length === 0}
+		<p class="muted">Ответов пока нет.</p>
+	{:else}
+		<ul class="replies">
+			{#each replies as item (item.id)}
+				<li class="replies__item">
+					<p class="small muted">
+						{timeAgo(item.created_at)}
+						{#if item.parent_id !== null}
+							· ответ на комментарий
+						{/if}
+					</p>
+
+					<div class="replies__body">
+						<RichText body={item.body} />
+					</div>
+
+					{#if item.posts && item.posts.deleted_at === null}
+						<a
+							class="replies__quote"
+							href={resolve('/p/[id]', { id: String(item.post_id) })}
+						>
+							{item.posts.body}
+						</a>
+					{:else}
+						<p class="replies__quote replies__quote--gone">Пост удалён</p>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+
+		{#if !repliesExhausted}
+			<button type="button" class="btn replies__more" onclick={moreReplies} disabled={repliesLoading}>
+				{repliesLoading ? 'Загружаю…' : 'Показать ещё'}
 			</button>
 		{/if}
 	{/if}
@@ -152,7 +288,6 @@
 		align-items: flex-start;
 		gap: 1rem;
 		padding-block: 1rem 1.25rem;
-		border-bottom: 1px solid var(--border);
 	}
 
 	.profile__info {
@@ -170,7 +305,67 @@
 		margin-inline-start: -0.9rem;
 	}
 
-	.more {
+	.tabs {
+		display: flex;
+		gap: 0.25rem;
+		margin-block-end: 0.75rem;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.tabs__tab {
+		min-height: var(--tap);
+		display: inline-flex;
+		align-items: center;
+		padding-inline: 0.75rem;
+		border-bottom: 2px solid transparent;
+		color: var(--muted);
+		font-size: 0.875rem;
+		font-weight: 500;
+	}
+
+	.tabs__tab:hover {
+		color: var(--fg);
+		text-decoration: none;
+	}
+
+	.tabs__tab--on {
+		border-bottom-color: var(--accent);
+		color: var(--fg);
+	}
+
+	.replies {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.replies__item {
+		padding-block: 1rem;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.replies__body {
+		margin-block-start: 0.125rem;
+	}
+
+	.replies__quote {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		overflow: hidden;
+		margin-block-start: 0.5rem;
+		padding-inline-start: 0.75rem;
+		border-inline-start: 2px solid var(--border);
+		color: var(--muted);
+		font-size: 0.875rem;
+	}
+
+	.replies__quote--gone {
+		font-style: italic;
+	}
+
+	.replies__more {
 		width: 100%;
 		margin-block-start: 1rem;
 	}

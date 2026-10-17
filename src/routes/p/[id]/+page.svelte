@@ -10,7 +10,8 @@
 		fetchComments,
 		fetchPost,
 		fetchReplies,
-		setLike
+		setLike,
+		setPinnedPost
 	} from '#lib/api';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import Composer from '#lib/components/Composer.svelte';
@@ -152,6 +153,18 @@
 		}
 	}
 
+	async function pin(target: FeedPost) {
+		if (!session.user || !session.profile) return;
+		const next = session.profile.pinned_post_id === target.id ? null : target.id;
+
+		try {
+			await setPinnedPost(session.user.id, next);
+			await session.refreshProfile();
+		} catch (cause) {
+			actionError = errorMessage(cause);
+		}
+	}
+
 	async function comment(body: string, parentId: number | null) {
 		if (!session.user || !post) throw new Error('Нужно войти в аккаунт.');
 
@@ -209,9 +222,11 @@
 	<PostCard
 		{post}
 		currentUserId={session.user?.id ?? null}
+		pinned={session.profile?.pinned_post_id === post.id}
 		onlike={like}
 		onedit={save}
 		onremove={remove}
+		onpin={pin}
 	/>
 
 	{#if actionError}
