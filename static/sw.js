@@ -6,7 +6,7 @@ self.addEventListener('install', (event) => {
 	event.waitUntil(
 		caches
 			.open(CACHE)
-			.then((cache) => cache.add(SHELL))
+			.then((cache) => cache.add(SHELL).catch(() => {}))
 			.then(() => self.skipWaiting())
 	);
 });
@@ -31,12 +31,12 @@ self.addEventListener('fetch', (event) => {
 			.then((response) => {
 				if (response.ok && response.type === 'basic') {
 					const copy = response.clone();
-					event.waitUntil(
-						caches
-							.open(CACHE)
-							.then((cache) => cache.put(request, copy))
-							.then(prune)
-					);
+
+					try {
+						event.waitUntil(store(request, copy));
+					} catch {
+						void store(request, copy);
+					}
 				}
 
 				return response;
@@ -44,6 +44,16 @@ self.addEventListener('fetch', (event) => {
 			.catch(() => restore(request))
 	);
 });
+
+async function store(request, response) {
+	try {
+		const cache = await caches.open(CACHE);
+		await cache.put(request, response);
+		await prune();
+	} catch {
+		return;
+	}
+}
 
 async function restore(request) {
 	const cached = await caches.match(request, { ignoreSearch: true });
@@ -63,5 +73,15 @@ async function prune() {
 
 	if (keys.length <= LIMIT) return;
 
-	await Promise.all(keys.slice(0, keys.length - LIMIT).map((key) => cache.delete(key)));
+	const root = new URL(self.registration.scope).pathname;
+	const excess = keys.length - LIMIT;
+	let removed = 0;
+
+	for (const key of keys) {
+		if (removed >= excess) break;
+		if (new URL(key.url).pathname === root) continue;
+
+		await cache.delete(key);
+		removed++;
+	}
 }
