@@ -4,6 +4,7 @@
 	import { createPost, deletePost, editPost, errorMessage, fetchFeed, setLike } from '#lib/api';
 	import { PostList } from '#lib/posts.svelte';
 	import { session } from '#lib/session.svelte';
+	import { resolve } from '$app/paths';
 	import type { FeedPost } from '#lib/types';
 
 	const list = new PostList(() => fetchFeed());
@@ -68,8 +69,8 @@
 			Короткие текстовые посты. Новое сверху, без алгоритмов и бесконечной ленты.
 		</p>
 		<div class="intro">
-			<a class="btn btn--primary" href="/signup">Регистрация</a>
-			<a class="btn" href="/login">Вход</a>
+			<a class="btn btn--primary" href={resolve('/signup')}>Регистрация</a>
+			<a class="btn" href={resolve('/login')}>Вход</a>
 		</div>
 	</section>
 {/if}

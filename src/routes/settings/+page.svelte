@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import { errorMessage, updateProfile, uploadAvatar } from '#lib/api';
 	import { session } from '#lib/session.svelte';
@@ -11,7 +12,7 @@
 	let error = $state('');
 
 	$effect(() => {
-		if (session.ready && !session.user) void goto('/login');
+		if (session.ready && !session.user) void goto(resolve('/login'));
 	});
 
 	async function save(event: SubmitEvent) {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { supabase } from '#lib/supabase';
 
 	let email = $state('');
@@ -27,7 +28,7 @@
 			return;
 		}
 
-		await goto('/');
+		await goto(resolve('/'));
 	}
 </script>
 
@@ -73,6 +74,6 @@
 	</form>
 
 	<p class="small muted">
-		Нет аккаунта? <a href="/signup">Зарегистрироваться</a>
+		Нет аккаунта? <a href={resolve('/signup')}>Зарегистрироваться</a>
 	</p>
 </section>

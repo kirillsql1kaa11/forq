@@ -9,7 +9,7 @@
 | Фронт | SvelteKit 3 (SPA, `adapter-static`), Svelte 5 с рунами |
 | Стили | чистый CSS, токены в `src/app.css`, тёмная тема через `prefers-color-scheme` |
 | Данные | Supabase напрямую из браузера: Auth, Postgres + RLS, PostgREST, Storage |
-| Хостинг | Cloudflare Pages (статика из `build/`) |
+| Хостинг | GitHub Pages или Netlify (статика из `build/`) |
 
 Серверного кода нет: весь доступ к данным идёт через PostgREST с anon-ключом, а разграничение прав делает RLS в Postgres.
 
@@ -21,14 +21,26 @@ cp .env.example .env
 npm run dev
 ```
 
-В `.env` нужны два значения из дашборда Supabase (Project Settings → API):
+В `.env` нужны два значения из дашборда Supabase (Project Settings → API Keys):
 
 ```
 PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-PUBLIC_SUPABASE_ANON_KEY=eyJ...
+PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...
 ```
 
-Пока они пустые, приложение показывает экран «ForQ пока не настроен».
+Годится и новый ключ `sb_publishable_...`, и старый anon-JWT — оба публичные по задумке и оба попадают в бандл браузера. Ключ `service_role` / `sb_secret_...` сюда класть нельзя ни в каком виде.
+
+Пока значения пустые, приложение показывает экран «ForQ пока не настроен».
+
+## Настройка Supabase
+
+1. SQL Editor → New query → вставить `supabase/migrations/0001_init.sql` → Run.
+2. Authentication → Sign In / Providers → Email: включить провайдер и оставить `Confirm email` включённым.
+3. Authentication → URL Configuration:
+   - Site URL — адрес, куда возвращать после подтверждения письма.
+   - Redirect URLs — список разрешённых адресов. Для разработки `http://localhost:5173/**`, для продакшена адрес страницы на Pages или Netlify, например `https://имя.github.io/**`.
+
+Приложение передаёт `emailRedirectTo` с текущим origin, но Supabase проигнорирует адрес, которого нет в списке Redirect URLs.
 
 ## База
 
@@ -77,6 +89,8 @@ src/
     p/[id]/                  пост и комментарии
     settings/                аватар и био
 supabase/migrations/0001_init.sql
+.github/workflows/deploy.yml   сборка и публикация на GitHub Pages
+netlify.toml                   настройки сборки и SPA-роутинга для Netlify
 ```
 
 ## Особенности SvelteKit 3
@@ -91,14 +105,54 @@ supabase/migrations/0001_init.sql
 
 `tsconfig.json` дополнительно прописывает `paths` для `#lib/*`, иначе TypeScript не находит эти импорты.
 
-## Деплой на Cloudflare Pages
+## Хостинг и доступность из России
+
+Замеры задержки с машины в Екатеринбурге (октябрь 2026):
+
+| Площадка | Результат |
+| --- | --- |
+| `*.github.io` | открывается, 0,18 с на соединение |
+| `*.netlify.app` | открывается, 0,14 с |
+| `*.supabase.co` | открывается, 0,09 с |
+| `*.vercel.app` | таймаут |
+| `*.pages.dev` | таймаут |
+
+Cloudflare Pages (`*.pages.dev`) и Vercel из России недоступны. Интересный момент: Supabase сам отдаётся через Cloudflare, но его домены работают — то есть блокировка задевает не весь Cloudflare, а конкретные площадки.
+
+Отсюда выбор: **GitHub Pages** как основной вариант, **Netlify** как запасной. Оба бесплатны и не требуют карты.
+
+### GitHub Pages
+
+В репозитории лежит `.github/workflows/deploy.yml`. Он собирает проект и публикует `build/` на Pages.
+
+1. Создать репозиторий на GitHub и запушить туда `master`.
+2. Settings → Pages → Source → **GitHub Actions**.
+3. Пуш в `master` запускает деплой.
+
+Сайт будет на `https://<логин>.github.io/<репозиторий>/`. Если назвать репозиторий `<логин>.github.io`, адрес будет без подпути.
+
+### Netlify
+
+Проще всего — перетащить папку `build` в браузере на app.netlify.com/drop, либо из консоли:
 
 ```bash
 npm run build
-npx wrangler pages deploy build
+npx netlify deploy --prod --dir=build
 ```
 
-В настройках проекта Pages задать `PUBLIC_SUPABASE_URL` и `PUBLIC_SUPABASE_ANON_KEY` как переменные сборки. Файл `static/_redirects` с правилом `/* /index.html 200` отдаёт SPA-роутер на все пути.
+Настройки сборки для авто-деплоя из репозитория лежат в `netlify.toml`, правило SPA-роутинга — в `static/_redirects`.
+
+### Про подпуть
+
+`vite.config.ts` читает переменную окружения `BASE_PATH`:
+
+```bash
+BASE_PATH=/forq npm run build
+```
+
+Все ссылки в проекте обёрнуты в `resolve()` из `$app/paths`, поэтому приложение одинаково работает и в корне домена, и в подпапке. В workflow базовый путь вычисляется автоматически: пустой для репозитория `<логин>.github.io` и `/<имя-репозитория>` для остальных.
+
+`static/.nojekyll` нужен, чтобы GitHub Pages не прогнал сборку через Jekyll и не выбросил папку `_app` (Jekyll игнорирует файлы с подчёркиванием). `.github/workflows/deploy.yml` дополнительно копирует `index.html` в `404.html` — так работает SPA-роутинг на Pages.
 
 ## Команды
 
@@ -112,6 +166,7 @@ npm run check    # svelte-kit sync + svelte-check
 ## Что не сделано
 
 - Капча на регистрации. При открытой регистрации включается за пару шагов: Cloudflare Turnstile в Supabase Auth → Settings → Bot and Abuse Protection, затем токен виджета передавать в `options.captchaToken` при `signUp`.
+- Своя отправка писем. Встроенный SMTP Supabase не годится для реальных получателей — нужен Resend или аналог в Auth → Settings → SMTP.
 - Жалобы на посты и модерация.
 - Абсолютные даты в постах не в локали пользователя, а в русской.
-- Нет e2e-тестов и CI.
+- Нет e2e-тестов.

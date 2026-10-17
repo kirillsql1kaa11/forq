@@ -1,0 +1,17 @@
+[build]
+  command = "npm run build"
+  publish = "build"
+
+[build.environment]
+  PUBLIC_SUPABASE_URL = "https://nuwtxfinexztrllabbfu.supabase.co"
+  PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_CS8PamZCh5R5jBdPWFlsAQ_4jXnmgTb"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/_app/immutable/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

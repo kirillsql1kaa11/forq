@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import Composer from '#lib/components/Composer.svelte';
 	import PostCard from '#lib/components/PostCard.svelte';
@@ -138,7 +139,7 @@
 		<Composer placeholder="Ответить…" submitLabel="Ответить" onsubmit={comment} />
 	{:else}
 		<p class="muted comments__guest">
-			<a href="/login">Войди</a>, чтобы ответить.
+			<a href={resolve('/login')}>Войди</a>, чтобы ответить.
 		</p>
 	{/if}
 
@@ -151,7 +152,7 @@
 					<Avatar username={item.profiles?.username ?? '?'} url={item.profiles?.avatar_url ?? null} size={28} />
 					<div class="comment__body">
 						<div class="comment__head">
-							<a class="comment__author" href="/u/{item.profiles?.username}">
+							<a class="comment__author" href={resolve('/u/[username]', { username: item.profiles?.username ?? '' })}>
 								@{item.profiles?.username}
 							</a>
 							<span class="small muted">{timeAgo(item.created_at)}</span>

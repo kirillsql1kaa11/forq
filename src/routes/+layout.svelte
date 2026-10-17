@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { session } from '#lib/session.svelte';
 	import { configMissing, supabase } from '#lib/supabase';
@@ -14,23 +15,24 @@
 	});
 
 	$effect(() => {
-		if (!session.ready) return;
+		if (!session.ready || configMissing) return;
 
 		const path = page.url.pathname;
+		const welcome = resolve('/welcome');
 
-		if (session.user && !session.profile && path !== '/welcome') {
-			void goto('/welcome');
+		if (session.user && !session.profile && path !== welcome) {
+			void goto(welcome);
 			return;
 		}
 
-		if (session.user && session.profile && path === '/welcome') {
-			void goto('/');
+		if (session.user && session.profile && path === welcome) {
+			void goto(resolve('/'));
 		}
 	});
 
 	async function signOut() {
 		await supabase.auth.signOut();
-		await goto('/');
+		await goto(resolve('/'));
 	}
 </script>
 
@@ -38,18 +40,20 @@
 
 <header class="app-header">
 	<div class="wrap app-header__inner">
-		<a class="app-header__brand" href="/">ForQ</a>
+		<a class="app-header__brand" href={resolve('/')}>ForQ</a>
 
 		<nav class="app-header__nav" aria-label="Основная навигация">
 			{#if session.user}
 				{#if session.profile}
-					<a class="btn btn--quiet" href="/u/{session.profile.username}">@{session.profile.username}</a>
+					<a class="btn btn--quiet" href={resolve('/u/[username]', { username: session.profile.username })}>
+						@{session.profile.username}
+					</a>
 				{/if}
-				<a class="btn btn--quiet" href="/settings">Настройки</a>
+				<a class="btn btn--quiet" href={resolve('/settings')}>Настройки</a>
 				<button type="button" class="btn btn--quiet" onclick={signOut}>Выйти</button>
 			{:else}
-				<a class="btn btn--quiet" href="/login">Вход</a>
-				<a class="btn btn--primary" href="/signup">Регистрация</a>
+				<a class="btn btn--quiet" href={resolve('/login')}>Вход</a>
+				<a class="btn btn--primary" href={resolve('/signup')}>Регистрация</a>
 			{/if}
 		</nav>
 	</div>
@@ -65,7 +69,7 @@
 					<code>.env</code> в корне проекта, потом перезапусти сборку.
 				</p>
 				<p class="muted small">
-					Оба значения лежат в дашборде Supabase: Project Settings → API. Сначала примени
+					Оба значения лежат в дашборде Supabase: Project Settings → API Keys. Сначала примени
 					<code>supabase/migrations/0001_init.sql</code> в SQL Editor.
 				</p>
 			</section>

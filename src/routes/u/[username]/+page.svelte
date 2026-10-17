@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import PostCard from '#lib/components/PostCard.svelte';
 	import {
@@ -111,7 +112,7 @@
 			<p class="small muted">С {monthYear(profile.created_at)}</p>
 
 			{#if session.profile?.id === profile.id}
-				<a class="btn btn--quiet profile__edit" href="/settings">Изменить профиль</a>
+				<a class="btn btn--quiet profile__edit" href={resolve('/settings')}>Изменить профиль</a>
 			{/if}
 		</div>
 	</header>

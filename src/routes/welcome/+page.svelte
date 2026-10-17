@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { claimUsername, errorMessage } from '#lib/api';
 	import { session } from '#lib/session.svelte';
 	import { USERNAME_PATTERN } from '#lib/types';
@@ -23,7 +24,7 @@
 		try {
 			await claimUsername(username);
 			await session.refreshProfile();
-			await goto('/');
+			await goto(resolve('/'));
 		} catch (cause) {
 			error = errorMessage(cause);
 		} finally {

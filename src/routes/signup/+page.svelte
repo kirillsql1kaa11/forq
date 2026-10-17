@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { supabase } from '#lib/supabase';
 	import { USERNAME_PATTERN } from '#lib/types';
 
@@ -25,7 +26,10 @@
 		const { data, error: authError } = await supabase.auth.signUp({
 			email: email.trim(),
 			password,
-			options: { data: { username: username.toLowerCase() } }
+			options: {
+				data: { username: username.toLowerCase() },
+				emailRedirectTo: window.location.origin + resolve('/')
+			}
 		});
 
 		busy = false;
@@ -36,7 +40,7 @@
 		}
 
 		if (data.session) {
-			await goto('/');
+			await goto(resolve('/'));
 			return;
 		}
 
@@ -115,7 +119,7 @@
 		</form>
 
 		<p class="small muted">
-			Уже есть аккаунт? <a href="/login">Войти</a>
+			Уже есть аккаунт? <a href={resolve('/login')}>Войти</a>
 		</p>
 	{/if}
 </section>

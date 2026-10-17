@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fullDate, timeAgo } from '#lib/format';
 	import { BODY_MAX, type FeedPost } from '#lib/types';
+	import { resolve } from '$app/paths';
 	import Avatar from './Avatar.svelte';
 
 	let {
@@ -37,14 +38,14 @@
 </script>
 
 <article class="post">
-	<a class="post__avatar" href="/u/{post.username}" tabindex="-1" aria-hidden="true">
+	<a class="post__avatar" href={resolve('/u/[username]', { username: post.username })} tabindex="-1" aria-hidden="true">
 		<Avatar username={post.username} url={post.avatar_url} />
 	</a>
 
 	<div class="post__main">
 		<div class="post__head">
-			<a class="post__author" href="/u/{post.username}">@{post.username}</a>
-			<a class="post__time" href="/p/{post.id}" title={fullDate(post.created_at)}>
+			<a class="post__author" href={resolve('/u/[username]', { username: post.username })}>@{post.username}</a>
+			<a class="post__time" href={resolve('/p/[id]', { id: String(post.id) })} title={fullDate(post.created_at)}>
 				{timeAgo(post.created_at)}
 			</a>
 			{#if post.edited_at}
@@ -83,7 +84,7 @@
 					<span>{post.like_count}</span>
 				</button>
 
-				<a class="btn btn--quiet post__action" href="/p/{post.id}" aria-label="Комментарии: {post.comment_count}">
+				<a class="btn btn--quiet post__action" href={resolve('/p/[id]', { id: String(post.id) })} aria-label="Комментарии: {post.comment_count}">
 					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
 						<path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12Z" stroke-linecap="round" stroke-linejoin="round" />
 					</svg>

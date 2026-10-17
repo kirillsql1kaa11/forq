@@ -21,6 +21,7 @@ SvelteKit 3 + Svelte 5 (руны), TypeScript, Vite 8. SPA через `@sveltejs
 - Env: объявление в `src/env.ts` через `defineEnvVars`, чтение из `$app/env/public`. Старые `$env/static/public` и `$env/dynamic/public` не существуют.
 - tsconfig наследует `$app/tsconfig` (файл генерируется в `node_modules/$app/tsconfig.json`). Пути для `#lib/*` прописаны вручную в `tsconfig.json`, потому что генератор их не создаёт.
 - Типы маршрутов лежат в `.svelte-kit/types`, параметры вида `page.params.username` имеют тип `string | undefined` — нужно приводить.
+- `$app/paths` экспортирует `resolve`, но не `base`. Ссылки внутри приложения нельзя писать строкой: `resolve('/settings')`, `resolve('/u/[username]', { username })`. Так базовый путь из `paths.base` подставляется сам, и сборка работает и в корне домена, и в подпапке. Базовый путь задаётся переменной окружения `BASE_PATH` при сборке.
 
 ## Структура
 
