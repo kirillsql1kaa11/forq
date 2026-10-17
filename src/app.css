@@ -273,6 +273,9 @@ code {
 }
 
 .app-header__brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
 	margin-inline-end: auto;
 	font-weight: 650;
 	letter-spacing: -0.01em;

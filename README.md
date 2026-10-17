@@ -131,11 +131,20 @@ static/
   manifest.webmanifest       PWA-манифест
   sw.js                      service worker: сеть вперёд, кеш как запас
   icon-*.png                 иконки, генерируются скриптом
+  favicon-32.png 16.png      фавиконы
+  mark.png                   знак без фона для шапки
+branding/logo.png            исходник логотипа, из него собираются иконки
 supabase/migrations/0001_init.sql
 supabase/migrations/0002_features.sql
 supabase/migrations/0003_counters_and_pins.sql
 netlify.toml                 сборка, переменные окружения и SPA-роутинг для Netlify
 ```
+
+## Бренд
+
+Исходник логотипа — `branding/logo.png`: знак «QF» и подпись «ForQ» на чёрном фоне. `npm run icons` сам находит на картинке две светлые полосы (знак и надпись), берёт верхнюю, строит из неё `static/mark.png` с прозрачным фоном и уже из него собирает иконки PWA, фавиконы и `apple-touch-icon`. Ничего не нужно вырезать руками: достаточно положить новый файл на место старого и перезапустить команду.
+
+Знак в шапке — тот же `mark.png`, но подставленный как CSS-маска поверх `currentColor`, поэтому он белый в тёмной теме и чёрный в светлой. Фон исходной картинки при этом не виден.
 
 ## Разметка текста
 
@@ -230,7 +239,7 @@ npm run dev      # дев-сервер
 npm run build    # сборка в build/
 npm run preview  # предпросмотр сборки
 npm run check    # svelte-kit sync + svelte-check
-npm run icons    # перегенерировать PNG-иконки из кода в scripts/icons.mjs
+npm run icons    # перегенерировать PNG-иконки из branding/logo.png
 ```
 
 ## Что не сделано

@@ -10,7 +10,7 @@ SvelteKit 3 + Svelte 5 (руны), TypeScript, Vite 8. SPA через `@sveltejs
 - `npm run build` — сборка в `build/`
 - `npm run check` — `svelte-kit sync` + `svelte-check`; запускать перед сдачей
 - `npm run preview` — предпросмотр сборки
-- `npm run icons` — перегенерировать PNG-иконки PWA из `scripts/icons.mjs` (нужен dev-зависимость `sharp`)
+- `npm run icons` — перегенерировать PNG-иконки, фавиконы и знак для шапки из `branding/logo.png` (нужен dev-зависимость `sharp`)
 
 ## Что важно знать про SvelteKit 3
 

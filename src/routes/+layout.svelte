@@ -54,7 +54,11 @@
 
 <header class="app-header">
 	<div class="wrap app-header__inner">
-		<a class="app-header__brand" href={resolve('/')}>ForQ</a>
+		<a class="app-header__brand" href={resolve('/')}>
+			<span class="app-header__mark" style="--mark: url('{asset('mark.png')}')" aria-hidden="true"
+			></span>
+			ForQ
+		</a>
 
 		<nav class="app-header__nav" aria-label="Основная навигация">
 			{#if session.user}
@@ -125,6 +129,21 @@
 
 	.skip:focus-visible {
 		inset-inline-start: 0;
+	}
+
+	.app-header__mark {
+		width: 1.375rem;
+		height: 1.375rem;
+		flex: none;
+		background: currentColor;
+		-webkit-mask-image: var(--mark);
+		mask-image: var(--mark);
+		-webkit-mask-repeat: no-repeat;
+		mask-repeat: no-repeat;
+		-webkit-mask-position: center;
+		mask-position: center;
+		-webkit-mask-size: contain;
+		mask-size: contain;
 	}
 
 	.app-header__bell {

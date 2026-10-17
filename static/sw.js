@@ -1,4 +1,4 @@
-const CACHE = 'forq-v1';
+const CACHE = 'forq-v2';
 const SHELL = './';
 const LIMIT = 150;
 
