@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { authMessage } from '#lib/api';
 	import { supabase } from '#lib/supabase';
 
 	let email = $state('');
@@ -21,10 +22,7 @@
 		busy = false;
 
 		if (authError) {
-			error =
-				authError.message === 'Invalid login credentials'
-					? 'Неверная почта или пароль.'
-					: authError.message;
+			error = authMessage(authError);
 			return;
 		}
 
@@ -62,6 +60,7 @@
 				autocomplete="current-password"
 				required
 			/>
+			<a class="small" href={resolve('/reset')}>Забыли пароль?</a>
 		</div>
 
 		{#if error}

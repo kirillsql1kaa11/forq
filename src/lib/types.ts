@@ -17,11 +17,13 @@ export type FeedPost = {
 	like_count: number;
 	comment_count: number;
 	liked_by_me: boolean;
+	pending?: boolean;
 };
 
 export type Comment = {
 	id: number;
 	post_id: number;
+	parent_id: number | null;
 	author_id: string;
 	body: string;
 	edited_at: string | null;
@@ -29,7 +31,42 @@ export type Comment = {
 	profiles: { username: string; avatar_url: string | null } | null;
 };
 
+export type NotificationKind = 'like' | 'comment' | 'reply' | 'mention';
+
+export type Notification = {
+	id: number;
+	kind: NotificationKind;
+	post_id: number | null;
+	comment_id: number | null;
+	read_at: string | null;
+	created_at: string;
+	actor_username: string;
+	actor_avatar_url: string | null;
+	post_body: string | null;
+	comment_body: string | null;
+};
+
+export type MentionCandidate = {
+	username: string;
+	avatar_url: string | null;
+};
+
 export const BODY_MAX = 500;
 export const BIO_MAX = 200;
+export const PASSWORD_MIN = 6;
 export const PAGE_SIZE = 20;
+export const COMMENT_PAGE_SIZE = 10;
+export const NOTIFICATION_PAGE_SIZE = 20;
+export const MENTION_SUGGESTIONS = 5;
+export const TAG_MAX = 50;
+
 export const USERNAME_PATTERN = /^[a-z0-9_]{3,24}$/;
+export const MENTION_PATTERN = /@([a-z0-9_]{3,24})/gi;
+export const TAG_PATTERN = /#([^\s#@,.;:!?()[\]{}<>«»"']+)/g;
+
+export const NOTIFICATION_TEXT: Record<NotificationKind, string> = {
+	like: 'отметил твой пост',
+	comment: 'ответил на твой пост',
+	reply: 'ответил на твой комментарий',
+	mention: 'упомянул тебя'
+};

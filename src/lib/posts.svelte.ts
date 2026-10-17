@@ -10,6 +10,7 @@ export class PostList {
 	actionError = $state('');
 
 	private loader: (cursor?: number) => Promise<FeedPost[]>;
+	private lastTempId = 0;
 
 	constructor(loader: (cursor?: number) => Promise<FeedPost[]>) {
 		this.loader = loader;
@@ -31,7 +32,7 @@ export class PostList {
 	}
 
 	async more(): Promise<void> {
-		const last = this.items.at(-1);
+		const last = this.items.filter((post) => !post.pending).at(-1);
 		if (this.loadingMore || this.exhausted || last === undefined) return;
 
 		this.loadingMore = true;
@@ -50,6 +51,37 @@ export class PostList {
 	async prepend(postId: number): Promise<void> {
 		const post = await fetchPost(postId);
 		if (post) this.items = [post, ...this.items];
+	}
+
+	placeholder(body: string, authorId: string, username: string, avatarUrl: string | null): number {
+		this.lastTempId -= 1;
+		const id = this.lastTempId;
+
+		this.exhausted = false;
+		this.items = [
+			{
+				id,
+				author_id: authorId,
+				body,
+				edited_at: null,
+				created_at: new Date().toISOString(),
+				username,
+				avatar_url: avatarUrl,
+				like_count: 0,
+				comment_count: 0,
+				liked_by_me: false,
+				pending: true
+			},
+			...this.items
+		];
+
+		return id;
+	}
+
+	settle(tempId: number, realId: number): void {
+		this.items = this.items.map((post) =>
+			post.id === tempId ? { ...post, id: realId, pending: false } : post
+		);
 	}
 
 	drop(id: number): void {

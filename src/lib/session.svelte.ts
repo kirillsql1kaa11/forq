@@ -1,10 +1,12 @@
 import type { User } from '@supabase/supabase-js';
+import { fetchUnreadCount } from './api';
 import { supabase } from './supabase';
 import type { Profile } from './types';
 
 class Session {
 	user = $state<User | null>(null);
 	profile = $state<Profile | null>(null);
+	unread = $state(0);
 	authReady = $state(false);
 	profileReady = $state(false);
 
@@ -22,12 +24,16 @@ class Session {
 		this.user = data.session?.user ?? null;
 		this.authReady = true;
 		await this.refreshProfile();
+		await this.refreshUnread();
 
 		supabase.auth.onAuthStateChange((_event, current) => {
 			this.user = current?.user ?? null;
 			this.authReady = true;
 			this.profileReady = false;
-			setTimeout(() => void this.refreshProfile(), 0);
+			setTimeout(() => {
+				void this.refreshProfile();
+				void this.refreshUnread();
+			}, 0);
 		});
 	}
 
@@ -46,6 +52,19 @@ class Session {
 
 		this.profile = (data as Profile | null) ?? null;
 		this.profileReady = true;
+	}
+
+	async refreshUnread(): Promise<void> {
+		if (!this.user) {
+			this.unread = 0;
+			return;
+		}
+
+		try {
+			this.unread = await fetchUnreadCount();
+		} catch {
+			this.unread = 0;
+		}
 	}
 }
 

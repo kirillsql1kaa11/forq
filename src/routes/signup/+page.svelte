@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { authMessage } from '#lib/api';
 	import { supabase } from '#lib/supabase';
 	import { USERNAME_PATTERN } from '#lib/types';
 
@@ -35,7 +36,7 @@
 		busy = false;
 
 		if (authError) {
-			error = authError.message;
+			error = authMessage(authError);
 			return;
 		}
 

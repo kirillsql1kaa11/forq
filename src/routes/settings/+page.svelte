@@ -1,15 +1,26 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { changePassword, errorMessage, updateProfile, uploadAvatar } from '#lib/api';
 	import Avatar from '#lib/components/Avatar.svelte';
-	import { errorMessage, updateProfile, uploadAvatar } from '#lib/api';
+	import { prepareAvatar } from '#lib/image';
 	import { session } from '#lib/session.svelte';
-	import { BIO_MAX } from '#lib/types';
+	import { BIO_MAX, PASSWORD_MIN } from '#lib/types';
 
 	let bio = $state(session.profile?.bio ?? '');
 	let busy = $state(false);
 	let notice = $state('');
 	let error = $state('');
+
+	let password = $state('');
+	let confirmation = $state('');
+	let passwordBusy = $state(false);
+	let passwordNotice = $state('');
+	let passwordError = $state('');
+
+	const passwordReady = $derived(
+		password.length >= PASSWORD_MIN && password === confirmation
+	);
 
 	$effect(() => {
 		if (session.ready && !session.user) void goto(resolve('/login'));
@@ -48,8 +59,8 @@
 			return;
 		}
 
-		if (file.size > 2 * 1024 * 1024) {
-			error = 'Файл больше 2 МБ.';
+		if (file.size > 10 * 1024 * 1024) {
+			error = 'Файл больше 10 МБ.';
 			input.value = '';
 			return;
 		}
@@ -57,7 +68,8 @@
 		busy = true;
 
 		try {
-			const url = await uploadAvatar(session.user.id, file);
+			const image = await prepareAvatar(file);
+			const url = await uploadAvatar(session.user.id, image);
 			await updateProfile(session.user.id, { avatar_url: url });
 			await session.refreshProfile();
 			notice = 'Аватар обновлён.';
@@ -66,6 +78,26 @@
 		} finally {
 			busy = false;
 			input.value = '';
+		}
+	}
+
+	async function savePassword(event: SubmitEvent) {
+		event.preventDefault();
+		if (!passwordReady) return;
+
+		passwordBusy = true;
+		passwordNotice = '';
+		passwordError = '';
+
+		try {
+			await changePassword(password);
+			password = '';
+			confirmation = '';
+			passwordNotice = 'Пароль обновлён.';
+		} catch (cause) {
+			passwordError = errorMessage(cause);
+		} finally {
+			passwordBusy = false;
 		}
 	}
 </script>
@@ -93,7 +125,7 @@
 					onchange={pickAvatar}
 					disabled={busy}
 				/>
-				<p class="field__hint">PNG, JPEG, WebP или GIF, до 2 МБ.</p>
+				<p class="field__hint">До 10 МБ. Картинка сжимается до 256 пикселей по длинной стороне.</p>
 			</div>
 		</div>
 
@@ -124,6 +156,50 @@
 			</button>
 		</form>
 	</section>
+
+	<section class="panel stack">
+		<h2>Пароль</h2>
+
+		<form class="stack" onsubmit={savePassword}>
+			<div class="field">
+				<label class="field__label" for="password">Новый пароль</label>
+				<input
+					id="password"
+					class="field__input"
+					type="password"
+					bind:value={password}
+					autocomplete="new-password"
+					minlength={PASSWORD_MIN}
+				/>
+			</div>
+
+			<div class="field">
+				<label class="field__label" for="password-again">Ещё раз</label>
+				<input
+					id="password-again"
+					class="field__input"
+					type="password"
+					bind:value={confirmation}
+					autocomplete="new-password"
+				/>
+				{#if confirmation.length > 0 && password !== confirmation}
+					<p class="field__error">Пароли не совпадают.</p>
+				{/if}
+			</div>
+
+			{#if passwordError}
+				<p class="field__error" role="alert">{passwordError}</p>
+			{/if}
+
+			{#if passwordNotice}
+				<p class="field__hint" role="status">{passwordNotice}</p>
+			{/if}
+
+			<button type="submit" class="btn btn--primary" disabled={!passwordReady || passwordBusy}>
+				{passwordBusy ? 'Меняю…' : 'Сменить пароль'}
+			</button>
+		</form>
+	</section>
 {/if}
 
 <style>
@@ -132,5 +208,9 @@
 		grid-template-columns: auto minmax(0, 1fr);
 		gap: 1rem;
 		align-items: start;
+	}
+
+	h2 {
+		font-size: 1rem;
 	}
 </style>

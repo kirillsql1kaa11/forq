@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Snippet } from 'svelte';
+	import { dev } from '$app/env';
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
+	import { asset, resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { session } from '#lib/session.svelte';
 	import { configMissing, supabase } from '#lib/supabase';
@@ -10,8 +11,14 @@
 
 	let { children }: { children: Snippet } = $props();
 
+	let observedUser: string | null | undefined = undefined;
+
 	onMount(() => {
 		if (!configMissing) void session.start();
+
+		if (!dev && 'serviceWorker' in navigator) {
+			void navigator.serviceWorker.register(asset('sw.js'));
+		}
 	});
 
 	$effect(() => {
@@ -30,6 +37,13 @@
 		}
 	});
 
+	$effect(() => {
+		const userId = session.user?.id ?? null;
+		if (userId === observedUser) return;
+		observedUser = userId;
+		void session.refreshUnread();
+	});
+
 	async function signOut() {
 		await supabase.auth.signOut();
 		await goto(resolve('/'));
@@ -44,8 +58,25 @@
 
 		<nav class="app-header__nav" aria-label="Основная навигация">
 			{#if session.user}
+				<a
+					class="btn btn--quiet app-header__bell"
+					href={resolve('/notifications')}
+					aria-label={session.unread > 0 ? `Уведомления: ${session.unread} новых` : 'Уведомления'}
+				>
+					<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+						<path d="M6 9a6 6 0 1 1 12 0c0 4 1.5 5 1.5 5h-15S6 13 6 9Z" stroke-linecap="round" stroke-linejoin="round" />
+						<path d="M10 18a2 2 0 0 0 4 0" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+					{#if session.unread > 0}
+						<span class="app-header__badge">{session.unread > 99 ? '99+' : session.unread}</span>
+					{/if}
+				</a>
+
 				{#if session.profile}
-					<a class="btn btn--quiet" href={resolve('/u/[username]', { username: session.profile.username })}>
+					<a
+						class="btn btn--quiet"
+						href={resolve('/u/[username]', { username: session.profile.username })}
+					>
 						@{session.profile.username}
 					</a>
 				{/if}
@@ -70,7 +101,7 @@
 				</p>
 				<p class="muted small">
 					Оба значения лежат в дашборде Supabase: Project Settings → API Keys. Сначала примени
-					<code>supabase/migrations/0001_init.sql</code> в SQL Editor.
+					<code>supabase/migrations/0001_init.sql</code> и <code>0002_features.sql</code> в SQL Editor.
 				</p>
 			</section>
 		{:else if session.ready}
@@ -94,5 +125,22 @@
 
 	.skip:focus-visible {
 		inset-inline-start: 0;
+	}
+
+	.app-header__bell {
+		position: relative;
+		padding-inline: 0.75rem;
+	}
+
+	.app-header__badge {
+		min-width: 1.25rem;
+		padding-inline: 0.25rem;
+		border-radius: 999px;
+		background: var(--accent);
+		color: var(--bg);
+		font-size: 0.6875rem;
+		font-weight: 600;
+		line-height: 1.25rem;
+		text-align: center;
 	}
 </style>

@@ -3,6 +3,7 @@
 	import { BODY_MAX, type FeedPost } from '#lib/types';
 	import { resolve } from '$app/paths';
 	import Avatar from './Avatar.svelte';
+	import RichText from './RichText.svelte';
 
 	let {
 		post,
@@ -45,11 +46,15 @@
 	<div class="post__main">
 		<div class="post__head">
 			<a class="post__author" href={resolve('/u/[username]', { username: post.username })}>@{post.username}</a>
-			<a class="post__time" href={resolve('/p/[id]', { id: String(post.id) })} title={fullDate(post.created_at)}>
-				{timeAgo(post.created_at)}
-			</a>
-			{#if post.edited_at}
-				<span class="post__edited">изменён</span>
+			{#if post.pending}
+				<span class="post__time">отправляется…</span>
+			{:else}
+				<a class="post__time" href={resolve('/p/[id]', { id: String(post.id) })} title={fullDate(post.created_at)}>
+					{timeAgo(post.created_at)}
+				</a>
+				{#if post.edited_at}
+					<span class="post__edited">изменён</span>
+				{/if}
 			{/if}
 		</div>
 
@@ -65,10 +70,12 @@
 				</div>
 			</form>
 		{:else}
-			<p class="post__text">{post.body}</p>
+			<div class="post__text">
+				<RichText body={post.body} />
+			</div>
 		{/if}
 
-		{#if !editing}
+		{#if !editing && !post.pending}
 			<div class="post__actions">
 				<button
 					type="button"
@@ -148,7 +155,6 @@
 
 	.post__text {
 		margin-block: 0.125rem 0.375rem;
-		white-space: pre-wrap;
 	}
 
 	.post__actions {
