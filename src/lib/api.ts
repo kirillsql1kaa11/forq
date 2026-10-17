@@ -4,6 +4,7 @@ import {
 	MENTION_SUGGESTIONS,
 	NOTIFICATION_PAGE_SIZE,
 	PAGE_SIZE,
+	SEARCH_MIN,
 	type Comment,
 	type FeedPost,
 	type MentionCandidate,
@@ -14,7 +15,7 @@ import {
 } from './types';
 
 type DbError = { code?: string; message: string };
-type ErrorKind = 'post' | 'comment' | 'username' | 'pin' | 'generic';
+type ErrorKind = 'post' | 'comment' | 'username' | 'pin' | 'account' | 'generic';
 
 const AUTH_MESSAGES: [string, string][] = [
 	['invalid login credentials', 'Неверная почта или пароль.'],
@@ -49,6 +50,7 @@ function describe(error: DbError, kind: ErrorKind): string {
 			return 'Нужно войти в аккаунт.';
 		case '23514':
 			if (kind === 'pin') return 'Закрепить можно только свой неудалённый пост.';
+			if (kind === 'account') return 'Ник не совпал. Введи свой ник точно.';
 			return kind === 'comment' ? 'Ответ пустой или длиннее 500 символов.' : 'Текст пустой или длиннее 500 символов.';
 		case '23505':
 			return kind === 'username' ? 'Этот ник уже занят.' : 'Такая запись уже есть.';
@@ -85,6 +87,18 @@ function toComments(data: unknown[] | null, error: DbError | null): Comment[] {
 
 export async function fetchFeed(cursor?: number): Promise<FeedPost[]> {
 	let query = supabase.from('feed').select('*').order('id', { ascending: false }).limit(PAGE_SIZE);
+	if (cursor !== undefined) query = query.lt('id', cursor);
+
+	const { data, error } = await query;
+	return unwrap<FeedPost[]>(data, error, 'generic') ?? [];
+}
+
+export async function fetchFollowingFeed(cursor?: number): Promise<FeedPost[]> {
+	let query = supabase
+		.from('following_feed')
+		.select('*')
+		.order('id', { ascending: false })
+		.limit(PAGE_SIZE);
 	if (cursor !== undefined) query = query.lt('id', cursor);
 
 	const { data, error } = await query;
@@ -237,6 +251,52 @@ export async function setLike(postId: number, userId: string, liked: boolean): P
 	}
 }
 
+export async function isFollowing(followerId: string, followeeId: string): Promise<boolean> {
+	const { data, error } = await supabase
+		.from('follows')
+		.select('followee_id')
+		.eq('follower_id', followerId)
+		.eq('followee_id', followeeId)
+		.maybeSingle();
+
+	if (error) throw new Error(describe(error, 'generic'));
+	return data !== null;
+}
+
+export async function setFollow(
+	followerId: string,
+	followeeId: string,
+	following: boolean
+): Promise<void> {
+	const result = following
+		? await supabase.from('follows').insert({ follower_id: followerId, followee_id: followeeId })
+		: await supabase
+				.from('follows')
+				.delete()
+				.eq('follower_id', followerId)
+				.eq('followee_id', followeeId);
+
+	if (result.error && result.error.code !== '23505') {
+		throw new Error(describe(result.error, 'generic'));
+	}
+}
+
+export async function searchPosts(term: string, cursor?: number): Promise<FeedPost[]> {
+	const cleaned = term.trim();
+	if (cleaned.length < SEARCH_MIN) return [];
+
+	const { data, error } = await supabase
+		.rpc('search_posts', { p_query: cleaned, p_cursor: cursor ?? null })
+		.limit(PAGE_SIZE);
+
+	return unwrap<FeedPost[]>(data, error, 'generic') ?? [];
+}
+
+export async function deleteAccount(username: string): Promise<void> {
+	const { error } = await supabase.rpc('delete_account', { p_username: username });
+	if (error) throw new Error(describe(error, 'account'));
+}
+
 export async function fetchComments(postId: number, cursor?: number): Promise<Comment[]> {
 	let query = supabase
 		.from('comments')
@@ -376,6 +436,11 @@ export async function sendPasswordReset(email: string, redirectTo: string): Prom
 
 export async function changePassword(password: string): Promise<void> {
 	const { error } = await supabase.auth.updateUser({ password });
+	if (error) throw new Error(authMessage(error));
+}
+
+export async function signOut(): Promise<void> {
+	const { error } = await supabase.auth.signOut();
 	if (error) throw new Error(authMessage(error));
 }
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { changePassword, errorMessage, updateProfile, uploadAvatar } from '#lib/api';
+	import { changePassword, deleteAccount, errorMessage, signOut, updateProfile, uploadAvatar } from '#lib/api';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import { prepareAvatar } from '#lib/image';
 	import { session } from '#lib/session.svelte';
@@ -17,6 +17,10 @@
 	let passwordBusy = $state(false);
 	let passwordNotice = $state('');
 	let passwordError = $state('');
+
+	let confirming = $state('');
+	let accountBusy = $state(false);
+	let accountError = $state('');
 
 	const passwordReady = $derived(
 		password.length >= PASSWORD_MIN && password === confirmation
@@ -98,6 +102,23 @@
 			passwordError = errorMessage(cause);
 		} finally {
 			passwordBusy = false;
+		}
+	}
+
+	async function removeAccount(event: SubmitEvent) {
+		event.preventDefault();
+		if (!session.profile || confirming !== session.profile.username) return;
+
+		accountBusy = true;
+		accountError = '';
+
+		try {
+			await deleteAccount(confirming);
+			await signOut();
+			await goto(resolve('/'));
+		} catch (cause) {
+			accountError = errorMessage(cause);
+			accountBusy = false;
 		}
 	}
 </script>
@@ -200,6 +221,43 @@
 			</button>
 		</form>
 	</section>
+
+	<section class="panel stack delete-account">
+		<h2>Удаление аккаунта</h2>
+		<p class="muted small">
+			Профиль, посты, ответы и отметки «нравится» удаляются навсегда. Восстановить их нельзя, ник
+			освободится и его сможет занять кто угодно.
+		</p>
+
+		<form class="stack" onsubmit={removeAccount}>
+			<div class="field">
+				<label class="field__label" for="delete-confirm">
+					Введи свой ник, чтобы подтвердить
+				</label>
+				<input
+					id="delete-confirm"
+					class="field__input"
+					bind:value={confirming}
+					autocomplete="off"
+					autocapitalize="off"
+					spellcheck="false"
+					placeholder={session.profile.username}
+				/>
+			</div>
+
+			{#if accountError}
+				<p class="field__error" role="alert">{accountError}</p>
+			{/if}
+
+			<button
+				type="submit"
+				class="btn delete-account__submit"
+				disabled={confirming !== session.profile.username || accountBusy}
+			>
+				{accountBusy ? 'Удаляю…' : 'Удалить аккаунт'}
+			</button>
+		</form>
+	</section>
 {/if}
 
 <style>
@@ -212,5 +270,15 @@
 
 	h2 {
 		font-size: 1rem;
+	}
+
+	.delete-account {
+		border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+	}
+
+	.delete-account__submit {
+		justify-self: start;
+		border-color: var(--danger);
+		color: var(--danger);
 	}
 </style>

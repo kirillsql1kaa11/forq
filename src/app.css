@@ -255,6 +255,35 @@ code {
 	border-radius: var(--radius);
 }
 
+.tabs {
+	display: flex;
+	gap: 0.25rem;
+	overflow-x: auto;
+	border-bottom: 1px solid var(--border);
+}
+
+.tabs__tab {
+	min-height: var(--tap);
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	padding-inline: 0.75rem;
+	border-bottom: 2px solid transparent;
+	color: var(--muted);
+	font-size: 0.875rem;
+	font-weight: 500;
+}
+
+.tabs__tab:hover {
+	color: var(--fg);
+	text-decoration: none;
+}
+
+.tabs__tab--on {
+	border-bottom-color: var(--accent);
+	color: var(--fg);
+}
+
 .app-header {
 	position: sticky;
 	top: 0;

@@ -8,6 +8,8 @@
 		fetchProfile,
 		fetchUserPosts,
 		fetchUserReplies,
+		isFollowing,
+		setFollow,
 		setPinnedPost
 	} from '#lib/api';
 	import Avatar from '#lib/components/Avatar.svelte';
@@ -37,6 +39,8 @@
 	let repliesError = $state('');
 	let current: string | undefined = undefined;
 	let tabKey: string | undefined = undefined;
+	let following = $state(false);
+	let followBusy = $state(false);
 
 	const posts = new PostList((cursor) =>
 		authorId ? fetchUserPosts(authorId, cursor) : Promise.resolve([])
@@ -85,6 +89,7 @@
 		actionError = '';
 		profile = null;
 		authorId = null;
+		following = false;
 		replies = [];
 		repliesError = '';
 		repliesExhausted = true;
@@ -107,6 +112,14 @@
 
 			profile = found;
 			authorId = found.id;
+
+			if (session.user && session.user.id !== found.id) {
+				try {
+					following = await isFollowing(session.user.id, found.id);
+				} catch {
+					following = false;
+				}
+			}
 		} catch (cause) {
 			actionError = errorMessage(cause);
 		} finally {
@@ -177,6 +190,24 @@
 			actionError = errorMessage(cause);
 		}
 	}
+
+	async function toggleFollow() {
+		const user = session.user;
+		if (!user || !profile || followBusy) return;
+
+		const next = !following;
+		followBusy = true;
+		actionError = '';
+
+		try {
+			await setFollow(user.id, profile.id, next);
+			following = next;
+		} catch (cause) {
+			actionError = errorMessage(cause);
+		} finally {
+			followBusy = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -199,7 +230,21 @@
 			<p class="small muted">С {monthYear(profile.created_at)}</p>
 
 			{#if mine}
-				<a class="btn btn--quiet profile__edit" href={resolve('/settings')}>Изменить профиль</a>
+				<div class="profile__actions">
+					<a class="btn btn--quiet" href={resolve('/settings')}>Изменить профиль</a>
+				</div>
+			{:else if session.user}
+				<div class="profile__actions">
+					<button
+						type="button"
+						class="btn"
+						class:btn--primary={!following}
+						onclick={toggleFollow}
+						disabled={followBusy}
+					>
+						{following ? 'Отписаться' : 'Подписаться'}
+					</button>
+				</div>
 			{/if}
 		</div>
 	</header>
@@ -300,37 +345,16 @@
 		white-space: pre-wrap;
 	}
 
-	.profile__edit {
-		justify-self: start;
+	.profile__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-block-start: 0.5rem;
 		margin-inline-start: -0.9rem;
 	}
 
 	.tabs {
-		display: flex;
-		gap: 0.25rem;
 		margin-block-end: 0.75rem;
-		border-bottom: 1px solid var(--border);
-	}
-
-	.tabs__tab {
-		min-height: var(--tap);
-		display: inline-flex;
-		align-items: center;
-		padding-inline: 0.75rem;
-		border-bottom: 2px solid transparent;
-		color: var(--muted);
-		font-size: 0.875rem;
-		font-weight: 500;
-	}
-
-	.tabs__tab:hover {
-		color: var(--fg);
-		text-decoration: none;
-	}
-
-	.tabs__tab--on {
-		border-bottom-color: var(--accent);
-		color: var(--fg);
 	}
 
 	.replies {

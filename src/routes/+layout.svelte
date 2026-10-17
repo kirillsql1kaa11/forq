@@ -5,8 +5,9 @@
 	import { goto } from '$app/navigation';
 	import { asset, resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { signOut } from '#lib/api';
 	import { session } from '#lib/session.svelte';
-	import { configMissing, supabase } from '#lib/supabase';
+	import { configMissing } from '#lib/supabase';
 	import '../app.css';
 
 	let { children }: { children: Snippet } = $props();
@@ -44,8 +45,8 @@
 		void session.refreshUnread();
 	});
 
-	async function signOut() {
-		await supabase.auth.signOut();
+	async function leave() {
+		await signOut();
 		await goto(resolve('/'));
 	}
 </script>
@@ -61,6 +62,17 @@
 		</a>
 
 		<nav class="app-header__nav" aria-label="Основная навигация">
+			<a
+				class="btn btn--quiet app-header__icon"
+				href={resolve('/search')}
+				aria-label="Поиск по постам"
+			>
+				<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+					<circle cx="10.5" cy="10.5" r="6" />
+					<path d="m15 15 4.5 4.5" stroke-linecap="round" />
+				</svg>
+			</a>
+
 			{#if session.user}
 				<a
 					class="btn btn--quiet app-header__bell"
@@ -85,7 +97,7 @@
 					</a>
 				{/if}
 				<a class="btn btn--quiet" href={resolve('/settings')}>Настройки</a>
-				<button type="button" class="btn btn--quiet" onclick={signOut}>Выйти</button>
+				<button type="button" class="btn btn--quiet" onclick={leave}>Выйти</button>
 			{:else}
 				<a class="btn btn--quiet" href={resolve('/login')}>Вход</a>
 				<a class="btn btn--primary" href={resolve('/signup')}>Регистрация</a>
@@ -148,6 +160,10 @@
 
 	.app-header__bell {
 		position: relative;
+		padding-inline: 0.75rem;
+	}
+
+	.app-header__icon {
 		padding-inline: 0.75rem;
 	}
 

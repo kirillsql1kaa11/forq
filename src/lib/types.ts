@@ -33,7 +33,7 @@ export type Comment = {
 	profiles: { username: string; avatar_url: string | null } | null;
 };
 
-export type NotificationKind = 'like' | 'comment' | 'reply' | 'mention';
+export type NotificationKind = 'like' | 'comment' | 'reply' | 'mention' | 'follow';
 
 export type Notification = {
 	id: number;
@@ -85,6 +85,7 @@ export const COMMENT_PAGE_SIZE = 10;
 export const NOTIFICATION_PAGE_SIZE = 20;
 export const MENTION_SUGGESTIONS = 5;
 export const TAG_MAX = 50;
+export const SEARCH_MIN = 2;
 
 export const USERNAME_PATTERN = /^[a-z0-9_]{3,24}$/;
 export const MENTION_PATTERN = /@([a-z0-9_]{3,24})/gi;
@@ -94,5 +95,15 @@ export const NOTIFICATION_TEXT: Record<NotificationKind, string> = {
 	like: 'отметил твой пост',
 	comment: 'ответил на твой пост',
 	reply: 'ответил на твой комментарий',
-	mention: 'упомянул тебя'
+	mention: 'упомянул тебя',
+	follow: 'подписался на тебя'
+};
+
+export const FEED_TABS = ['all', 'following'] as const;
+
+export type FeedTab = (typeof FEED_TABS)[number];
+
+export const FEED_TAB_TEXT: Record<FeedTab, string> = {
+	all: 'Все',
+	following: 'Подписки'
 };

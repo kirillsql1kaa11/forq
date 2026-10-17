@@ -5,6 +5,7 @@
 	import { mentionQuery } from '#lib/format';
 	import { BODY_MAX, type MentionCandidate } from '#lib/types';
 	import Avatar from './Avatar.svelte';
+	import RichText from './RichText.svelte';
 
 	let {
 		placeholder = 'Что происходит?',
@@ -27,10 +28,12 @@
 	let suggestions = $state<MentionCandidate[]>([]);
 	let mention = $state<{ start: number; query: string } | null>(null);
 	let highlighted = $state(0);
+	let preview = $state(false);
 	let ticket = 0;
 
 	const left = $derived(BODY_MAX - body.length);
 	const canSubmit = $derived(body.trim().length > 0 && left >= 0 && !busy);
+	const shown = $derived(preview && body.trim().length > 0);
 
 	$effect(() => {
 		if (autofocus && field) field.focus();
@@ -163,11 +166,27 @@
 		{/if}
 	</div>
 
+	{#if shown}
+		<div class="composer__preview">
+			<RichText body={body} />
+		</div>
+	{/if}
+
 	{#if error}
 		<p class="field__error" role="alert">{error}</p>
 	{/if}
 
 	<div class="composer__foot">
+		{#if body.trim().length > 0}
+			<button
+				type="button"
+				class="btn btn--quiet composer__toggle"
+				aria-pressed={preview}
+				onclick={() => (preview = !preview)}
+			>
+				{preview ? 'Скрыть' : 'Предпросмотр'}
+			</button>
+		{/if}
 		<span class="composer__count" class:composer__count--low={left < 50}>{left}</span>
 		<button type="submit" class="btn btn--primary" disabled={!canSubmit}>
 			{submitLabel}
@@ -209,6 +228,19 @@
 
 	.composer__count--low {
 		color: var(--danger);
+	}
+
+	.composer__toggle {
+		margin-inline-end: auto;
+		min-height: auto;
+		padding-block: 0.25rem;
+	}
+
+	.composer__preview {
+		padding-block: 0.25rem;
+		padding-inline-start: 0.75rem;
+		border-inline-start: 2px solid var(--border);
+		overflow-wrap: anywhere;
 	}
 
 	.mentions {
