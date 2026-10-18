@@ -1,3 +1,4 @@
+import { matchUrl } from './links';
 import { TAG_MAX } from './types';
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -9,7 +10,12 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 	['second', 1]
 ];
 
-const TOKEN = /@([a-z0-9_]{3,24})|#([^\s#@,.;:!?()[\]{}<>«»"']+)/gi;
+const MENTION = /^@([a-z0-9_]{3,24})/i;
+const TAG = /^#([^\s#@,.;:!?()[\]{}<>«»"']+)/;
+const PROTOCOL_URL = /^(?:https?:\/\/|www\.)[^\s<>"'«»]+/i;
+const BARE_URL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?::\d{1,5})?(?:\/[^\s<>"'«»]*)?/i;
+const GLUED = /[\p{L}\p{N}_]/u;
+const BOUNDARY = /[^\p{L}\p{N}_@#./-]/u;
 
 const relative = new Intl.RelativeTimeFormat('ru', { numeric: 'auto', style: 'narrow' });
 const absolute = new Intl.DateTimeFormat('ru', { dateStyle: 'long', timeStyle: 'short' });
@@ -18,7 +24,11 @@ const monthly = new Intl.DateTimeFormat('ru', { month: 'long', year: 'numeric' }
 export type TextToken =
 	| { kind: 'text'; text: string }
 	| { kind: 'mention'; text: string; value: string }
-	| { kind: 'tag'; text: string; value: string };
+	| { kind: 'tag'; text: string; value: string }
+	| { kind: 'link'; text: string; href: string }
+	| { kind: 'bold'; text: string }
+	| { kind: 'italic'; text: string }
+	| { kind: 'code'; text: string };
 
 export function timeAgo(iso: string): string {
 	const seconds = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -44,31 +54,116 @@ export function initials(username: string): string {
 	return username.slice(0, 1).toUpperCase();
 }
 
+export function plural(count: number, one: string, few: string, many: string): string {
+	const mod10 = count % 10;
+	const mod100 = count % 100;
+
+	if (mod10 === 1 && mod100 !== 11) return one;
+	if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+	return many;
+}
+
+export function plainText(body: string): string {
+	return tokenize(body)
+		.map((token) => token.text)
+		.join('');
+}
+
 export function tokenize(body: string): TextToken[] {
 	const tokens: TextToken[] = [];
-	let cursor = 0;
+	let text = '';
+	let index = 0;
 
-	for (const match of body.matchAll(TOKEN)) {
-		const at = match.index ?? 0;
-
-		if (at > cursor) tokens.push({ kind: 'text', text: body.slice(cursor, at) });
-
-		const previous = at > 0 ? body[at - 1] : '';
-		const gluesToWord = /[a-z0-9_]/i.test(previous);
-
-		if (match[1] !== undefined && !gluesToWord) {
-			tokens.push({ kind: 'mention', text: match[0], value: match[1].toLowerCase() });
-		} else if (match[2] !== undefined && match[2].length <= TAG_MAX) {
-			tokens.push({ kind: 'tag', text: match[0], value: match[2].toLowerCase() });
-		} else {
-			tokens.push({ kind: 'text', text: match[0] });
-		}
-
-		cursor = at + match[0].length;
+	function flush() {
+		if (text.length === 0) return;
+		tokens.push({ kind: 'text', text });
+		text = '';
 	}
 
-	if (cursor < body.length) tokens.push({ kind: 'text', text: body.slice(cursor) });
+	while (index < body.length) {
+		const rest = body.slice(index);
+		const previous = index > 0 ? body[index - 1] : '';
+		const boundary = index === 0 || BOUNDARY.test(previous);
 
+		if (rest.startsWith('`')) {
+			const close = rest.indexOf('`', 1);
+			if (close > 1) {
+				flush();
+				tokens.push({ kind: 'code', text: rest.slice(1, close) });
+				index += close + 1;
+				continue;
+			}
+		}
+
+		if (rest.startsWith('**')) {
+			const close = rest.indexOf('**', 2);
+			if (close > 2 && !/\s/.test(rest[2]) && !/\s/.test(rest[close - 1])) {
+				flush();
+				tokens.push({ kind: 'bold', text: rest.slice(2, close) });
+				index += close + 2;
+				continue;
+			}
+		}
+
+		if (rest.startsWith('*') && !rest.startsWith('**')) {
+			const close = rest.indexOf('*', 1);
+			if (
+				close > 1 &&
+				rest[close + 1] !== '*' &&
+				!/\s/.test(rest[1]) &&
+				!/\s/.test(rest[close - 1])
+			) {
+				flush();
+				tokens.push({ kind: 'italic', text: rest.slice(1, close) });
+				index += close + 1;
+				continue;
+			}
+		}
+
+		if (boundary) {
+			const raw = rest.match(PROTOCOL_URL)?.[0] ?? rest.match(BARE_URL)?.[0];
+
+			if (raw) {
+				const link = matchUrl(raw);
+
+				if (link) {
+					flush();
+					tokens.push({ kind: 'link', text: link.text, href: link.href });
+					index += link.text.length;
+				} else {
+					text += raw;
+					index += raw.length;
+				}
+
+				continue;
+			}
+		}
+
+		if (rest[0] === '@' && !(index > 0 && GLUED.test(previous))) {
+			const found = rest.match(MENTION);
+			if (found && found[1]) {
+				flush();
+				tokens.push({ kind: 'mention', text: found[0], value: found[1].toLowerCase() });
+				index += found[0].length;
+				continue;
+			}
+		}
+
+		if (rest[0] === '#') {
+			const found = rest.match(TAG);
+			if (found && found[1] && found[1].length <= TAG_MAX) {
+				flush();
+				tokens.push({ kind: 'tag', text: found[0], value: found[1].toLowerCase() });
+				index += found[0].length;
+				continue;
+			}
+		}
+
+		text += body[index];
+		index += 1;
+	}
+
+	flush();
 	return tokens;
 }
 

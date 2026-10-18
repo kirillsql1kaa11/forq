@@ -2,6 +2,19 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { changePassword, deleteAccount, errorMessage, signOut, updateProfile, uploadAvatar } from '#lib/api';
+	import {
+		ACCENTS,
+		ACCENT_SWATCH,
+		ACCENT_TEXT,
+		THEMES,
+		THEME_TEXT,
+		applyAccent,
+		applyTheme,
+		readAccent,
+		readTheme,
+		type Accent,
+		type Theme
+	} from '#lib/appearance';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import { prepareAvatar } from '#lib/image';
 	import { session } from '#lib/session.svelte';
@@ -22,13 +35,22 @@
 	let accountBusy = $state(false);
 	let accountError = $state('');
 
+	let theme = $state<Theme>(readTheme());
+	let accent = $state<Accent>(readAccent());
+
 	const passwordReady = $derived(
 		password.length >= PASSWORD_MIN && password === confirmation
 	);
 
-	$effect(() => {
-		if (session.ready && !session.user) void goto(resolve('/login'));
-	});
+	function pickTheme(next: Theme) {
+		theme = next;
+		applyTheme(next);
+	}
+
+	function pickAccent(next: Accent) {
+		accent = next;
+		applyAccent(next);
+	}
 
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
@@ -127,9 +149,53 @@
 	<title>Настройки — ForQ</title>
 </svelte:head>
 
+<h1>Настройки</h1>
+
+<section class="panel stack">
+	<h2>Оформление</h2>
+
+	<fieldset class="appearance">
+		<legend class="field__label">Тема</legend>
+		<div class="chips">
+			{#each THEMES as item (item)}
+				<button
+					type="button"
+					class="chip"
+					class:chip--on={theme === item}
+					aria-pressed={theme === item}
+					onclick={() => pickTheme(item)}
+				>
+					{THEME_TEXT[item]}
+				</button>
+			{/each}
+		</div>
+	</fieldset>
+
+	<fieldset class="appearance">
+		<legend class="field__label">Акцент</legend>
+		<div class="chips">
+			{#each ACCENTS as item (item)}
+				<button
+					type="button"
+					class="chip"
+					class:chip--on={accent === item}
+					aria-pressed={accent === item}
+					onclick={() => pickAccent(item)}
+				>
+					<span class="chip__swatch" style="--swatch: {ACCENT_SWATCH[item]}" aria-hidden="true"
+					></span>
+					{ACCENT_TEXT[item]}
+				</button>
+			{/each}
+		</div>
+	</fieldset>
+
+	<p class="field__hint">Запоминается в этом браузере и работает без входа.</p>
+</section>
+
 {#if session.profile}
 	<section class="panel stack">
-		<h1>Настройки</h1>
+		<h2>Профиль</h2>
 		<p class="small muted">
 			Почта: {session.user?.email} · Ник: @{session.profile.username}
 		</p>
@@ -258,6 +324,11 @@
 			</button>
 		</form>
 	</section>
+{:else}
+	<section class="panel stack">
+		<p class="muted">Остальные настройки появятся после входа в аккаунт.</p>
+		<a class="btn btn--primary settings__login" href={resolve('/login')}>Войти</a>
+	</section>
 {/if}
 
 <style>
@@ -270,6 +341,58 @@
 
 	h2 {
 		font-size: 1rem;
+	}
+
+	.settings__login {
+		justify-self: start;
+	}
+
+	.appearance {
+		display: grid;
+		gap: 0.5rem;
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+
+	.appearance legend {
+		padding: 0;
+		margin-block-end: 0.5rem;
+	}
+
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+	}
+
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 2.25rem;
+		padding-inline: 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: var(--bg);
+		font-size: 0.875rem;
+	}
+
+	.chip:hover {
+		background: var(--surface);
+	}
+
+	.chip--on {
+		border-color: var(--accent);
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
+		color: var(--accent);
+	}
+
+	.chip__swatch {
+		width: 0.75rem;
+		height: 0.75rem;
+		border-radius: 999px;
+		background: var(--swatch);
 	}
 
 	.delete-account {

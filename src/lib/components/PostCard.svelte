@@ -1,8 +1,12 @@
 <script lang="ts">
-	import { fullDate, timeAgo } from '#lib/format';
-	import { BODY_MAX, type FeedPost } from '#lib/types';
+	import { onDestroy } from 'svelte';
 	import { resolve } from '$app/paths';
+	import { copyText } from '#lib/clipboard';
+	import { fullDate, timeAgo } from '#lib/format';
+	import { applyMarkup } from '#lib/markup';
+	import { BODY_MAX, type FeedPost } from '#lib/types';
 	import Avatar from './Avatar.svelte';
+	import MarkupTools from './MarkupTools.svelte';
 	import RichText from './RichText.svelte';
 
 	let {
@@ -26,6 +30,9 @@
 	let editing = $state(false);
 	let draft = $state('');
 	let confirming = $state(false);
+	let copied = $state(false);
+	let editor = $state<HTMLTextAreaElement | null>(null);
+	let timer: ReturnType<typeof setTimeout> | undefined;
 
 	const mine = $derived(currentUserId !== null && currentUserId === post.author_id);
 
@@ -40,6 +47,34 @@
 		editing = false;
 		if (next && next !== post.body) onedit(post, next);
 	}
+
+	function format(mark: string) {
+		if (!editor) return;
+
+		const start = editor.selectionStart ?? draft.length;
+		const end = editor.selectionEnd ?? start;
+		const result = applyMarkup(draft, start, end, mark, BODY_MAX);
+		if (!result) return;
+
+		draft = result.value;
+
+		void Promise.resolve().then(() => {
+			editor?.focus();
+			editor?.setSelectionRange(result.start, result.end);
+		});
+	}
+
+	async function copyLink() {
+		const url = new URL(resolve('/p/[id]', { id: String(post.id) }), location.origin).toString();
+		const ok = await copyText(url);
+		if (!ok) return;
+
+		copied = true;
+		clearTimeout(timer);
+		timer = setTimeout(() => (copied = false), 2000);
+	}
+
+	onDestroy(() => clearTimeout(timer));
 </script>
 
 <article class="post">
@@ -68,7 +103,16 @@
 		{#if editing}
 			<form onsubmit={save}>
 				<label class="sr-only" for="edit-{post.id}">Изменить пост</label>
-				<textarea id="edit-{post.id}" class="field__input" bind:value={draft} maxlength={BODY_MAX}></textarea>
+
+				<MarkupTools onformat={format} />
+
+				<textarea
+					id="edit-{post.id}"
+					bind:this={editor}
+					class="field__input post__editor"
+					bind:value={draft}
+					maxlength={BODY_MAX}
+				></textarea>
 				<div class="row">
 					<button type="button" class="btn btn--quiet" onclick={() => (editing = false)}>Отмена</button>
 					<button type="submit" class="btn btn--primary" disabled={!draft.trim() || draft.trim() === post.body}>
@@ -104,6 +148,22 @@
 					</svg>
 					<span>{post.comment_count}</span>
 				</a>
+
+				<button
+					type="button"
+					class="btn btn--quiet post__action"
+					class:post__action--on={copied}
+					onclick={copyLink}
+					aria-label="Скопировать ссылку на пост"
+				>
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+						<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.7 1.7" stroke-linecap="round" stroke-linejoin="round" />
+						<path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.7-1.7" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+					<span>{copied ? 'Скопировано' : 'Ссылка'}</span>
+				</button>
+
+				<span class="sr-only" role="status">{copied ? 'Ссылка скопирована' : ''}</span>
 
 				{#if mine}
 					{#if onpin}
@@ -208,6 +268,10 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: 0.5rem;
+		margin-block-start: 0.5rem;
+	}
+
+	.post__editor {
 		margin-block-start: 0.5rem;
 	}
 </style>

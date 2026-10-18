@@ -12,6 +12,21 @@
 		<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
 		<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<script>
+			(() => {
+				try {
+					const theme = localStorage.getItem('forq-theme');
+					const accent = localStorage.getItem('forq-accent');
+					const root = document.documentElement;
+					if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
+					if (accent === 'emerald' || accent === 'amber' || accent === 'rose') {
+						root.dataset.accent = accent;
+					}
+				} catch {
+					return;
+				}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

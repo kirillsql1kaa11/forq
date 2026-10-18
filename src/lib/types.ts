@@ -67,6 +67,26 @@ export type UserReply = {
 	posts: ReplyPost | null;
 };
 
+export type FollowCounts = {
+	followers: number;
+	following: number;
+};
+
+export type FollowPerson = {
+	username: string;
+	avatar_url: string | null;
+	bio: string | null;
+};
+
+export const PEOPLE_TABS = ['followers', 'following'] as const;
+
+export type PeopleTab = (typeof PEOPLE_TABS)[number];
+
+export const PEOPLE_TAB_TEXT: Record<PeopleTab, string> = {
+	followers: 'Подписчики',
+	following: 'Подписки'
+};
+
 export const PROFILE_TABS = ['posts', 'replies', 'likes'] as const;
 
 export type ProfileTab = (typeof PROFILE_TABS)[number];
@@ -83,6 +103,7 @@ export const PASSWORD_MIN = 6;
 export const PAGE_SIZE = 20;
 export const COMMENT_PAGE_SIZE = 10;
 export const NOTIFICATION_PAGE_SIZE = 20;
+export const PEOPLE_PAGE_SIZE = 30;
 export const MENTION_SUGGESTIONS = 5;
 export const TAG_MAX = 50;
 export const SEARCH_MIN = 2;

@@ -4,11 +4,15 @@ import {
 	MENTION_SUGGESTIONS,
 	NOTIFICATION_PAGE_SIZE,
 	PAGE_SIZE,
+	PEOPLE_PAGE_SIZE,
 	SEARCH_MIN,
 	type Comment,
 	type FeedPost,
+	type FollowCounts,
+	type FollowPerson,
 	type MentionCandidate,
 	type Notification,
+	type PeopleTab,
 	type Profile,
 	type ReplyPost,
 	type UserReply
@@ -279,6 +283,49 @@ export async function setFollow(
 	if (result.error && result.error.code !== '23505') {
 		throw new Error(describe(result.error, 'generic'));
 	}
+}
+
+export async function fetchFollowCounts(userId: string): Promise<FollowCounts> {
+	const [followers, following] = await Promise.all([
+		supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('followee_id', userId),
+		supabase.from('follows').select('followee_id', { count: 'exact', head: true }).eq('follower_id', userId)
+	]);
+
+	if (followers.error) throw new Error(describe(followers.error, 'generic'));
+	if (following.error) throw new Error(describe(following.error, 'generic'));
+
+	return { followers: followers.count ?? 0, following: following.count ?? 0 };
+}
+
+type FollowPersonRow = {
+	person: FollowPerson | FollowPerson[] | null;
+};
+
+export async function fetchFollowPeople(
+	userId: string,
+	mode: PeopleTab,
+	offset = 0
+): Promise<FollowPerson[]> {
+	const relation = mode === 'followers' ? 'follows_follower_id_fkey' : 'follows_followee_id_fkey';
+	const filter = mode === 'followers' ? 'followee_id' : 'follower_id';
+	const tiebreak = mode === 'followers' ? 'follower_id' : 'followee_id';
+
+	const { data, error } = await supabase
+		.from('follows')
+		.select(`created_at, person:profiles!${relation}(username, avatar_url, bio)`)
+		.eq(filter, userId)
+		.order('created_at', { ascending: false })
+		.order(tiebreak)
+		.range(offset, offset + PEOPLE_PAGE_SIZE - 1);
+
+	const rows = unwrap<unknown[]>(data, error, 'generic') ?? [];
+
+	return rows
+		.map((row) => {
+			const person = (row as FollowPersonRow).person;
+			return Array.isArray(person) ? (person[0] ?? null) : person;
+		})
+		.filter((person): person is FollowPerson => person !== null);
 }
 
 export async function searchPosts(term: string, cursor?: number): Promise<FeedPost[]> {

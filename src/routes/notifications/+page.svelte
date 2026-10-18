@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { errorMessage, fetchNotifications, markNotificationsRead } from '#lib/api';
 	import Avatar from '#lib/components/Avatar.svelte';
-	import { timeAgo } from '#lib/format';
+	import { plainText, timeAgo } from '#lib/format';
 	import { session } from '#lib/session.svelte';
 	import { NOTIFICATION_PAGE_SIZE, NOTIFICATION_TEXT, type Notification } from '#lib/types';
 
@@ -52,7 +52,7 @@
 	}
 
 	function excerpt(item: Notification): string {
-		return item.comment_body ?? item.post_body ?? '';
+		return plainText(item.comment_body ?? item.post_body ?? '');
 	}
 
 	function link(item: Notification): string {

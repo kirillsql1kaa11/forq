@@ -3,8 +3,10 @@
 	import { searchProfiles } from '#lib/api';
 	import { postDraft } from '#lib/draft.svelte';
 	import { mentionQuery } from '#lib/format';
+	import { applyMarkup } from '#lib/markup';
 	import { BODY_MAX, type MentionCandidate } from '#lib/types';
 	import Avatar from './Avatar.svelte';
+	import MarkupTools from './MarkupTools.svelte';
 	import RichText from './RichText.svelte';
 
 	let {
@@ -87,7 +89,34 @@
 		reset();
 	}
 
+	function format(mark: string) {
+		if (!field) return;
+
+		const start = field.selectionStart ?? body.length;
+		const end = field.selectionEnd ?? start;
+		const result = applyMarkup(body, start, end, mark, BODY_MAX);
+		if (!result) return;
+
+		body = result.value;
+		setDraft(body);
+
+		void Promise.resolve().then(() => {
+			field?.focus();
+			field?.setSelectionRange(result.start, result.end);
+		});
+	}
+
 	function onkeydown(event: KeyboardEvent) {
+		if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+			const key = event.key.toLowerCase();
+
+			if (key === 'b' || key === 'i') {
+				event.preventDefault();
+				format(key === 'b' ? '**' : '*');
+				return;
+			}
+		}
+
 		if (suggestions.length === 0) return;
 
 		if (event.key === 'ArrowDown') {
@@ -130,6 +159,8 @@
 
 <form class="composer" onsubmit={submit}>
 	<label class="sr-only" for="composer-body">Текст</label>
+
+	<MarkupTools onformat={format} />
 
 	<div class="composer__field">
 		<textarea

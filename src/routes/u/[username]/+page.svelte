@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import {
 		errorMessage,
+		fetchFollowCounts,
 		fetchLikedPosts,
 		fetchPost,
 		fetchProfile,
@@ -15,7 +16,7 @@
 	import Avatar from '#lib/components/Avatar.svelte';
 	import PostFeed from '#lib/components/PostFeed.svelte';
 	import RichText from '#lib/components/RichText.svelte';
-	import { monthYear, timeAgo } from '#lib/format';
+	import { monthYear, plural, timeAgo } from '#lib/format';
 	import { PostList } from '#lib/posts.svelte';
 	import { session } from '#lib/session.svelte';
 	import {
@@ -23,6 +24,7 @@
 		PROFILE_TABS,
 		PROFILE_TAB_TEXT,
 		type FeedPost,
+		type FollowCounts,
 		type Profile,
 		type ProfileTab,
 		type UserReply
@@ -41,6 +43,7 @@
 	let tabKey: string | undefined = undefined;
 	let following = $state(false);
 	let followBusy = $state(false);
+	let counts = $state<FollowCounts | null>(null);
 
 	const posts = new PostList((cursor) =>
 		authorId ? fetchUserPosts(authorId, cursor) : Promise.resolve([])
@@ -90,6 +93,7 @@
 		profile = null;
 		authorId = null;
 		following = false;
+		counts = null;
 		replies = [];
 		repliesError = '';
 		repliesExhausted = true;
@@ -112,6 +116,12 @@
 
 			profile = found;
 			authorId = found.id;
+
+			try {
+				counts = await fetchFollowCounts(found.id);
+			} catch {
+				counts = null;
+			}
 
 			if (session.user && session.user.id !== found.id) {
 				try {
@@ -202,6 +212,13 @@
 		try {
 			await setFollow(user.id, profile.id, next);
 			following = next;
+
+			if (counts) {
+				counts = {
+					...counts,
+					followers: Math.max(0, counts.followers + (next ? 1 : -1))
+				};
+			}
 		} catch (cause) {
 			actionError = errorMessage(cause);
 		} finally {
@@ -227,6 +244,27 @@
 			{#if profile.bio}
 				<p class="profile__bio">{profile.bio}</p>
 			{/if}
+
+			{#if counts}
+				<p class="profile__counts small">
+					<a
+						class="profile__count"
+						href={resolve('/u/[username]/followers', { username: profile.username })}
+					>
+						<strong>{counts.followers}</strong>
+						{plural(counts.followers, 'подписчик', 'подписчика', 'подписчиков')}
+					</a>
+					<span class="muted" aria-hidden="true">·</span>
+					<a
+						class="profile__count"
+						href={resolve('/u/[username]/following', { username: profile.username })}
+					>
+						<strong>{counts.following}</strong>
+						{plural(counts.following, 'подписка', 'подписки', 'подписок')}
+					</a>
+				</p>
+			{/if}
+
 			<p class="small muted">С {monthYear(profile.created_at)}</p>
 
 			{#if mine}
@@ -343,6 +381,25 @@
 
 	.profile__bio {
 		white-space: pre-wrap;
+	}
+
+	.profile__counts {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.25rem 0.5rem;
+		margin-block-start: 0.125rem;
+	}
+
+	.profile__count {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 0.25rem;
+	}
+
+	.profile__count strong {
+		color: var(--fg);
+		font-weight: 600;
 	}
 
 	.profile__actions {
