@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy, onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import {
@@ -7,12 +8,14 @@
 		deletePost,
 		editPost,
 		errorMessage,
+		fetchComment,
 		fetchComments,
 		fetchPost,
 		fetchReplies,
 		setLike,
 		setPinnedPost
 	} from '#lib/api';
+	import { copyText } from '#lib/clipboard';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import Composer from '#lib/components/Composer.svelte';
 	import PostCard from '#lib/components/PostCard.svelte';
@@ -32,6 +35,25 @@
 	let replyingTo = $state<number | null>(null);
 	let currentId: number | undefined = undefined;
 	let currentUser: string | null | undefined = undefined;
+	let linked = $state<number | null>(null);
+	let copiedId = $state<number | null>(null);
+	let linkError = $state('');
+	let copyTimer: ReturnType<typeof setTimeout> | undefined;
+	let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+	onMount(() => {
+		const onHash = () => {
+			if (post) void openHash(post.id);
+		};
+
+		window.addEventListener('hashchange', onHash);
+		return () => window.removeEventListener('hashchange', onHash);
+	});
+
+	onDestroy(() => {
+		clearTimeout(copyTimer);
+		clearTimeout(flashTimer);
+	});
 
 	$effect(() => {
 		const id = Number(page.params.id);
@@ -50,6 +72,11 @@
 		comments = [];
 		replies = {};
 		commentsExhausted = true;
+		linked = null;
+		copiedId = null;
+		linkError = '';
+		clearTimeout(copyTimer);
+		clearTimeout(flashTimer);
 
 		try {
 			const found = await fetchPost(id);
@@ -62,6 +89,7 @@
 
 			post = found;
 			await loadComments(id);
+			await openHash(id);
 		} catch (cause) {
 			actionError = errorMessage(cause);
 		} finally {
@@ -92,9 +120,12 @@
 
 		try {
 			const batch = await fetchComments(post.id, last.id);
-			comments = [...comments, ...batch];
+			const known = new Set(comments.map((item) => item.id));
+			const added = batch.filter((item) => !known.has(item.id));
+
+			comments = [...comments, ...added];
 			commentsExhausted = batch.length < COMMENT_PAGE_SIZE;
-			await loadReplies(post.id, batch);
+			await loadReplies(post.id, added);
 		} catch (cause) {
 			actionError = errorMessage(cause);
 		} finally {
@@ -111,10 +142,112 @@
 
 		for (const row of rows) {
 			const key = row.parent_id ?? 0;
-			grouped[key] = [...(grouped[key] ?? []), row];
+			const current = grouped[key] ?? [];
+			if (!current.some((item) => item.id === row.id)) grouped[key] = [...current, row];
 		}
 
 		replies = grouped;
+	}
+
+	function findReply(id: number): Comment | undefined {
+		for (const list of Object.values(replies)) {
+			const found = list.find((item) => item.id === id);
+			if (found) return found;
+		}
+
+		return undefined;
+	}
+
+	function flash(id: number) {
+		linked = id;
+		clearTimeout(flashTimer);
+		flashTimer = setTimeout(() => (linked = null), 2400);
+
+		requestAnimationFrame(() => {
+			document.getElementById(`c${id}`)?.scrollIntoView({ block: 'center' });
+		});
+	}
+
+	async function openHash(postId: number) {
+		const match = /^#c(\d+)$/.exec(location.hash);
+
+		if (!match) {
+			linkError = '';
+			return;
+		}
+
+		const id = Number(match[1]);
+		linkError = '';
+		linked = null;
+		clearTimeout(flashTimer);
+
+		try {
+			const known = comments.find((item) => item.id === id) ?? findReply(id);
+
+			if (known) {
+				flash(id);
+				return;
+			}
+
+			const target = await fetchComment(id);
+
+			if (!target || target.post_id !== postId) {
+				linkError = 'Комментарий не найден или удалён.';
+				return;
+			}
+
+			if (comments.some((item) => item.id === id) || findReply(id)) {
+				flash(id);
+				return;
+			}
+
+			const parentId = target.parent_id;
+
+			if (parentId === null) {
+				comments = [target, ...comments];
+				const rows = await fetchReplies(postId, [target.id]);
+				replies = { ...replies, [target.id]: rows };
+			} else {
+				const parent =
+					comments.find((item) => item.id === parentId) ?? (await fetchComment(parentId));
+
+				if (!parent || parent.post_id !== postId || parent.parent_id !== null) {
+					linkError = 'Комментарий не найден или удалён.';
+					return;
+				}
+
+				if (!comments.some((item) => item.id === parent.id)) {
+					comments = [parent, ...comments];
+				}
+
+				const rows = await fetchReplies(postId, [parent.id]);
+				const merged = [...(replies[parent.id] ?? [])];
+
+				for (const row of rows) {
+					if (!merged.some((item) => item.id === row.id)) merged.push(row);
+				}
+
+				if (!merged.some((item) => item.id === target.id)) merged.push(target);
+
+				replies = { ...replies, [parent.id]: merged.sort((a, b) => a.id - b.id) };
+			}
+
+			flash(id);
+		} catch (cause) {
+			linkError = errorMessage(cause);
+		}
+	}
+
+	async function copyComment(id: number) {
+		if (!post) return;
+
+		const href = new URL(resolve('/p/[id]', { id: String(post.id) }), location.origin).toString();
+		const ok = await copyText(`${href}#c${id}`);
+		if (!ok) return;
+
+		copiedId = id;
+		clearTimeout(copyTimer);
+		copyTimer = setTimeout(() => (copiedId = null), 2000);
 	}
 
 	async function like(target: FeedPost) {
@@ -233,6 +366,10 @@
 		<p class="alert alert--error" role="alert">{actionError}</p>
 	{/if}
 
+	{#if linkError}
+		<p class="alert alert--error" role="alert">{linkError}</p>
+	{/if}
+
 	{#if session.user}
 		<Composer placeholder="Ответить…" submitLabel="Ответить" onsubmit={(body) => comment(body, null)} />
 	{:else}
@@ -246,7 +383,7 @@
 	{:else}
 		<ul class="comments">
 			{#each comments as item (item.id)}
-				<li class="comment">
+				<li class="comment" class:comment--linked={linked === item.id} id="c{item.id}">
 					<Avatar
 						username={item.profiles?.username ?? '?'}
 						url={item.profiles?.avatar_url ?? null}
@@ -262,6 +399,16 @@
 								@{item.profiles?.username}
 							</a>
 							<span class="small muted">{timeAgo(item.created_at)}</span>
+
+							<button
+								type="button"
+								class="btn btn--quiet comment__action"
+								title="Ссылка на комментарий"
+								aria-label="Скопировать ссылку на комментарий"
+								onclick={() => copyComment(item.id)}
+							>
+								{copiedId === item.id ? 'Скопировано' : 'Ссылка'}
+							</button>
 
 							{#if session.user}
 								<button
@@ -300,7 +447,11 @@
 						{#if replies[item.id]?.length}
 							<ul class="replies">
 								{#each replies[item.id] as reply (reply.id)}
-									<li class="comment comment--reply">
+									<li
+										class="comment comment--reply"
+										class:comment--linked={linked === reply.id}
+										id="c{reply.id}"
+									>
 										<Avatar
 											username={reply.profiles?.username ?? '?'}
 											url={reply.profiles?.avatar_url ?? null}
@@ -319,6 +470,16 @@
 												</a>
 												<span class="small muted">{timeAgo(reply.created_at)}</span>
 
+												<button
+													type="button"
+													class="btn btn--quiet comment__action"
+													title="Ссылка на комментарий"
+													aria-label="Скопировать ссылку на комментарий"
+													onclick={() => copyComment(reply.id)}
+												>
+													{copiedId === reply.id ? 'Скопировано' : 'Ссылка'}
+												</button>
+
 												{#if reply.author_id === session.user?.id}
 													<button
 														type="button"
@@ -331,8 +492,8 @@
 											</div>
 
 											<div class="comment__text">
-											<RichText body={reply.body} />
-										</div>
+												<RichText body={reply.body} />
+											</div>
 										</div>
 									</li>
 								{/each}
@@ -354,6 +515,10 @@
 			</button>
 		{/if}
 	{/if}
+
+	<span class="sr-only" role="status">
+		{copiedId ? 'Ссылка на комментарий скопирована' : ''}
+	</span>
 {/if}
 
 <style>
@@ -369,6 +534,16 @@
 		gap: 0.75rem;
 		padding-block: 0.875rem;
 		border-bottom: 1px solid var(--border);
+		scroll-margin-top: 6.5rem;
+		transition:
+			background-color 200ms ease,
+			box-shadow 200ms ease;
+	}
+
+	.comment--linked {
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
+		box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 8%, transparent);
 	}
 
 	.comment--reply {

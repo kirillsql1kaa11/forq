@@ -5,6 +5,7 @@ import {
 	NOTIFICATION_PAGE_SIZE,
 	PAGE_SIZE,
 	PEOPLE_PAGE_SIZE,
+	PEOPLE_SEARCH_LIMIT,
 	SEARCH_MIN,
 	type Comment,
 	type FeedPost,
@@ -13,6 +14,7 @@ import {
 	type MentionCandidate,
 	type Notification,
 	type PeopleTab,
+	type PersonResult,
 	type Profile,
 	type ReplyPost,
 	type UserReply
@@ -220,6 +222,32 @@ export async function fetchPost(id: number): Promise<FeedPost | null> {
 	return unwrap<FeedPost | null>(data, error, 'generic');
 }
 
+export async function fetchRandomPost(): Promise<FeedPost | null> {
+	const { count, error } = await supabase
+		.from('feed')
+		.select('id', { count: 'exact', head: true });
+
+	if (error) throw new Error(describe(error, 'generic'));
+
+	const total = count ?? 0;
+	if (total === 0) return null;
+
+	for (let attempt = 0; attempt < 3; attempt += 1) {
+		const offset = Math.floor(Math.random() * total);
+		const { data, error: rowError } = await supabase
+			.from('feed')
+			.select('*')
+			.order('id')
+			.range(offset, offset)
+			.maybeSingle();
+
+		if (rowError) throw new Error(describe(rowError, 'generic'));
+		if (data) return data as FeedPost;
+	}
+
+	return null;
+}
+
 export async function createPost(body: string, authorId: string): Promise<number> {
 	const { data, error } = await supabase
 		.from('posts')
@@ -339,6 +367,71 @@ export async function searchPosts(term: string, cursor?: number): Promise<FeedPo
 	return unwrap<FeedPost[]>(data, error, 'generic') ?? [];
 }
 
+export async function searchPeople(
+	term: string,
+	viewerId: string | null
+): Promise<PersonResult[]> {
+	const cleaned = term
+		.trim()
+		.replace(/[%_\\]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+
+	if (cleaned.length < SEARCH_MIN) return [];
+
+	const pattern = `%${cleaned}%`;
+	const [byName, byBio] = await Promise.all([
+		supabase
+			.from('profiles')
+			.select('id, username, avatar_url, bio')
+			.ilike('username', pattern)
+			.order('username')
+			.limit(PEOPLE_SEARCH_LIMIT),
+		supabase
+			.from('profiles')
+			.select('id, username, avatar_url, bio')
+			.ilike('bio', pattern)
+			.order('username')
+			.limit(PEOPLE_SEARCH_LIMIT)
+	]);
+
+	const names =
+		unwrap<Omit<PersonResult, 'following'>[]>(byName.data, byName.error, 'generic') ?? [];
+	const bios = unwrap<Omit<PersonResult, 'following'>[]>(byBio.data, byBio.error, 'generic') ?? [];
+	const merged = new Map<string, Omit<PersonResult, 'following'>>();
+
+	for (const row of [...names, ...bios]) {
+		if (!merged.has(row.id)) merged.set(row.id, row);
+	}
+
+	const prefix = cleaned.toLowerCase();
+	const rows = [...merged.values()]
+		.sort((a, b) => {
+			const aPrefix = a.username.startsWith(prefix) ? 0 : 1;
+			const bPrefix = b.username.startsWith(prefix) ? 0 : 1;
+			return aPrefix - bPrefix || a.username.localeCompare(b.username, 'ru');
+		})
+		.slice(0, PEOPLE_SEARCH_LIMIT);
+
+	if (!viewerId || rows.length === 0) {
+		return rows.map((row) => ({ ...row, following: false }));
+	}
+
+	const { data, error } = await supabase
+		.from('follows')
+		.select('followee_id')
+		.eq('follower_id', viewerId)
+		.in(
+			'followee_id',
+			rows.map((row) => row.id)
+		);
+
+	const followRows = unwrap<{ followee_id: string }[]>(data, error, 'generic') ?? [];
+	const following = new Set(followRows.map((row) => row.followee_id));
+
+	return rows.map((row) => ({ ...row, following: following.has(row.id) }));
+}
+
 export async function deleteAccount(username: string): Promise<void> {
 	const { error } = await supabase.rpc('delete_account', { p_username: username });
 	if (error) throw new Error(describe(error, 'account'));
@@ -369,6 +462,18 @@ export async function fetchReplies(postId: number, parentIds: number[]): Promise
 		.order('id');
 
 	return toComments(data, error);
+}
+
+export async function fetchComment(id: number): Promise<Comment | null> {
+	const { data, error } = await supabase
+		.from('comments')
+		.select(COMMENT_COLUMNS)
+		.eq('id', id)
+		.is('deleted_at', null)
+		.maybeSingle();
+
+	const row = unwrap<unknown | null>(data, error, 'generic');
+	return row ? normalizeComment(row as CommentRow) : null;
 }
 
 export async function createComment(

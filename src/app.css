@@ -350,6 +350,7 @@ code {
 	margin-inline-end: auto;
 	font-weight: 650;
 	letter-spacing: -0.01em;
+	white-space: nowrap;
 }
 
 .app-header__nav {

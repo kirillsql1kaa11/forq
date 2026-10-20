@@ -28,7 +28,8 @@ export type TextToken =
 	| { kind: 'link'; text: string; href: string }
 	| { kind: 'bold'; text: string }
 	| { kind: 'italic'; text: string }
-	| { kind: 'code'; text: string };
+	| { kind: 'code'; text: string }
+	| { kind: 'spoiler'; text: string };
 
 export function timeAgo(iso: string): string {
 	const seconds = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -65,7 +66,7 @@ export function plural(count: number, one: string, few: string, many: string): s
 
 export function plainText(body: string): string {
 	return tokenize(body)
-		.map((token) => token.text)
+		.map((token) => (token.kind === 'spoiler' ? '[спойлер]' : token.text))
 		.join('');
 }
 
@@ -91,6 +92,16 @@ export function tokenize(body: string): TextToken[] {
 				flush();
 				tokens.push({ kind: 'code', text: rest.slice(1, close) });
 				index += close + 1;
+				continue;
+			}
+		}
+
+		if (rest.startsWith('||')) {
+			const close = rest.indexOf('||', 2);
+			if (close > 2 && !/\s/.test(rest[2]) && !/\s/.test(rest[close - 1])) {
+				flush();
+				tokens.push({ kind: 'spoiler', text: rest.slice(2, close) });
+				index += close + 2;
 				continue;
 			}
 		}

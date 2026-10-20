@@ -32,6 +32,16 @@
 	>
 		<span class="tools__code">&lt;/&gt;</span>
 	</button>
+
+	<button
+		type="button"
+		class="tools__item"
+		title="Спойлер"
+		aria-label="Спойлер"
+		onclick={() => onformat('||')}
+	>
+		<span class="tools__spoiler">С</span>
+	</button>
 </div>
 
 <style>
@@ -67,5 +77,10 @@
 	.tools__code {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 		font-size: 0.75rem;
+	}
+
+	.tools__spoiler {
+		text-decoration: underline dotted;
+		text-underline-offset: 3px;
 	}
 </style>

@@ -78,6 +78,14 @@ export type FollowPerson = {
 	bio: string | null;
 };
 
+export type PersonResult = {
+	id: string;
+	username: string;
+	avatar_url: string | null;
+	bio: string | null;
+	following: boolean;
+};
+
 export const PEOPLE_TABS = ['followers', 'following'] as const;
 
 export type PeopleTab = (typeof PEOPLE_TABS)[number];
@@ -104,6 +112,7 @@ export const PAGE_SIZE = 20;
 export const COMMENT_PAGE_SIZE = 10;
 export const NOTIFICATION_PAGE_SIZE = 20;
 export const PEOPLE_PAGE_SIZE = 30;
+export const PEOPLE_SEARCH_LIMIT = 20;
 export const MENTION_SUGGESTIONS = 5;
 export const TAG_MAX = 50;
 export const SEARCH_MIN = 2;

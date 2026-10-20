@@ -65,7 +65,7 @@
 			<a
 				class="btn btn--quiet app-header__icon"
 				href={resolve('/search')}
-				aria-label="Поиск по постам"
+				aria-label="Поиск"
 			>
 				<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
 					<circle cx="10.5" cy="10.5" r="6" />
@@ -128,6 +128,13 @@
 	</div>
 </main>
 
+<footer class="app-footer">
+	<div class="wrap app-footer__inner">
+		<span class="small">Только текст, без алгоритмов.</span>
+		<a class="small" href={resolve('/about')}>О проекте</a>
+	</div>
+</footer>
+
 <style>
 	.skip {
 		position: absolute;
@@ -177,5 +184,27 @@
 		font-weight: 600;
 		line-height: 1.25rem;
 		text-align: center;
+	}
+
+	.app-footer {
+		padding-block: 1rem calc(1.5rem + env(safe-area-inset-bottom));
+		border-top: 1px solid var(--border);
+		color: var(--muted);
+	}
+
+	.app-footer__inner {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+	}
+
+	.app-footer a {
+		color: var(--muted);
+	}
+
+	.app-footer a:hover {
+		color: var(--fg);
 	}
 </style>
